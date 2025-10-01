@@ -1,7 +1,0 @@
-ninja_dyndep_version = 1.0
-build CMakeFiles\icp.dir\icp_project.cpp.obj: dyndep
-
-build CMakeFiles\icp.dir\app.cpp.obj: dyndep
-
-build CMakeFiles\icp.dir\utils.cpp.obj: dyndep
-
