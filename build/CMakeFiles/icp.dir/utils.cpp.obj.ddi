@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "CMakeFiles\\icp.dir\\utils.cpp.obj",
+            "outputs": [
+                "C:\\Users\\Bagr\\Desktop\\schoolshit\\icp\\project\\icp_project\\build\\vc140.pdb",
+                "CMakeFiles\\icp.dir\\utils.cpp.obj.ddi"
+            ],
+            "requires": []
+        }
+    ]
+}
