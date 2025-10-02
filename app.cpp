@@ -13,6 +13,7 @@
 
 #include "app.hpp"
 #include "utils.hpp"
+#include "fpsmeter.hpp"
 
 void App::draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int size)
 {
@@ -29,6 +30,30 @@ void App::draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int
 
     cv::line(img, p1, p2, CV_RGB(255, 0, 0), 3);
     cv::line(img, p3, p4, CV_RGB(255, 0, 0), 3);
+}
+
+cv::Point2f App::find_face(cv::Mat& frame)
+{
+    cv::Point2f center(0.0f, 0.0f);
+
+    cv::Mat scene_grey;
+    cv::cvtColor(frame, scene_grey, cv::COLOR_BGR2GRAY);
+
+    std::vector<cv::Rect> faces;
+    face_cascade.detectMultiScale(scene_grey, faces);
+
+    if (faces.size() > 0)
+    {
+
+        // compute "center" as normalized coordinates of the face
+        cv::Rect rect = faces[0];
+        center.x = (rect.x + rect.width / 2.0f) / frame.cols;
+        center.y = (rect.y + rect.height / 2.0f) / frame.rows;
+    }
+
+    std::cout << "found normalized center: " << center << std::endl;
+
+    return center;
 }
 
 App::App()
@@ -63,10 +88,11 @@ bool App::init(void)
 int App::run(void)
 {
     cv::Mat frame, scene;
+    fps_meter FPS;
 
     while (1)
     {
-        auto start = std::chrono::steady_clock::now();
+        
         capture.read(frame);
         if (frame.empty())
         {
@@ -90,12 +116,14 @@ int App::run(void)
         cv::Scalar threshold_lower = { 160, 130, 150 };
         cv::Scalar threshold_upper = { 180, 255, 255 };
 
-        cv::Point2f center = find_object_chroma(scene_cross, threshold_lower, threshold_upper);
+        //cv::Point2f center = find_object_chroma(scene_cross, threshold_lower, threshold_upper);
+        cv::Point2f center = find_face(scene_cross);
         draw_cross_normalized(scene_cross, center, 30);
         cv::imshow("scene", scene_cross);
-        auto end = std::chrono::steady_clock::now();
-        std::chrono::duration<double> elapsed_seconds = end - start;
-        std::cout << "elapsed time: " << elapsed_seconds.count() * 1000 << "ms" << std::endl;
+
+        if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
+            std::cout << "FPS: " << FPS.get() << std::endl;
+        FPS.update();
 
         if (cv::waitKey(1) == 27)
             break;

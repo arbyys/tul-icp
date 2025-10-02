@@ -15,5 +15,7 @@ public:
 private:
     cv::VideoCapture capture;
     void draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int size);
+    cv::CascadeClassifier face_cascade = cv::CascadeClassifier("resources/haarcascade_frontalface_default.xml");
+    cv::Point2f find_face(cv::Mat& frame);
 };
 
