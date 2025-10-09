@@ -144,8 +144,25 @@ int App::run(void)
         cv::Scalar threshold_upper = { 180, 255, 255 };
 
         //cv::Point2f center = find_object_chroma(scene_cross, threshold_lower, threshold_upper);
-        cv::Point2f center = find_face(scene_cross);
-        draw_cross_normalized(scene_cross, center, 30);
+        //cv::Point2f center = find_face(scene_cross);
+        std::vector<cv::Point2f> centers = find_faces(scene_cross);
+        //for (const cv::Point2f& center : centers) {
+        //    draw_cross_normalized(scene_cross, center, 30);
+        //}
+        if (centers.size() <= 0) {
+            cv::Mat img = cv::imread("resources/empty.jpg");
+            cv::resize(img, scene_cross, scene_cross.size());
+        }
+        else if (centers.size() == 1) {
+            cv::Point2f red_object = find_object_chroma(scene_cross, threshold_lower, threshold_upper);
+            draw_cross_normalized(scene_cross, red_object, 30);
+        }
+        else {
+            cv::Mat img = cv::imread("resources/warning.jpg");
+            cv::resize(img, scene_cross, scene_cross.size());
+        }
+
+
         cv::imshow("scene", scene_cross);
 
         if (FPS.is_updated()) // display new value only once per interval (default = 1.0s)
