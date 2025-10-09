@@ -7,6 +7,7 @@
 #include <stack>
 #include <random>
 #include <numeric>
+#include <vector>
 
 // OpenCV 
 #include <opencv2\opencv.hpp>
@@ -54,6 +55,32 @@ cv::Point2f App::find_face(cv::Mat& frame)
     std::cout << "found normalized center: " << center << std::endl;
 
     return center;
+}
+
+std::vector<cv::Point2f> App::find_faces(cv::Mat& frame)
+{
+    std::vector<cv::Point2f> centers;
+
+    cv::Mat scene_grey;
+    cv::cvtColor(frame, scene_grey, cv::COLOR_BGR2GRAY);
+
+    std::vector<cv::Rect> faces;
+    face_cascade.detectMultiScale(scene_grey, faces);
+
+
+    if (faces.size() > 0)
+    {
+        for (const cv::Rect& rect : faces)
+        {
+            // compute "center" as normalized coordinates of the face
+            cv::Point2f center(0.0f, 0.0f);
+            center.x = (rect.x + rect.width / 2.0f) / frame.cols;
+            center.y = (rect.y + rect.height / 2.0f) / frame.rows;
+            centers.push_back(center);
+        }
+    }
+
+    return centers;
 }
 
 App::App()
