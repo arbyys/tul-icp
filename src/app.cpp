@@ -123,7 +123,7 @@ int App::run(void)
 
         // animation related
         double frame_begin_timepoint = now;
-        double previous_frame_render_time{};
+        double delta_t = 0.1;
 
         // Clear color saved to OpenGL state machine: no need to set repeatedly in game loop
         glClearColor(0, 0, 0, 0);
@@ -159,30 +159,38 @@ int App::run(void)
 
             // set shader uniforms once (if all models use same shader)
             auto current_shader = shader_library.at("simple_shader");
-            current_shader->setUniform("ucolor", glm::vec4(r, g, b, a));
-            
-            scene.at("teapot").pivot_position += glm::vec3(0.1, 0.1, 0.1);
+            //set transformations
+            glm::vec3 movement = camera.process_input(window, delta_t);
+            camera.Position += movement;
+            //std::cout << movement << std::endl;
+
+            // set uniforms for shader - common for all objects (do not set for each object individually, they use same shader anyway)
+            current_shader->setUniform("uV_m", camera.GetViewMatrix());
+            current_shader->setUniform("uP_m", projection_matrix);
 
             for (auto& [name, model] : scene) {
-                model.update(now);
                 model.draw();
             }
 
             // unbind framebuffer
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+
             ImGuiViewport* viewport = ImGui::GetMainViewport();
 
             ImGui::SetNextWindowPos(viewport->Pos);
             ImGui::SetNextWindowSize(viewport->Size);
+            //ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
             ImGuiWindowFlags flags =
                 ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoResize;
+                ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoScrollbar |
+                ImGuiWindowFlags_NoScrollWithMouse;
 
             // ImGui prepare render (only if required)
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
             ImGui::Begin("Main", 0, flags);
 
             const float window_width = ImGui::GetContentRegionAvail().x;
@@ -193,7 +201,7 @@ int App::run(void)
             const float scene_width = 0.5f * window_width;
 
             // scene part of the main window
-            ImGui::BeginChild("ScenePanel", ImVec2(scene_width, scene_height), true);
+            ImGui::BeginChild("ScenePanel", ImVec2(scene_width, scene_height), true, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
             ImGui::Text("Scene");
             ImGui::Image(
                 texture_id,
@@ -277,11 +285,9 @@ int App::run(void)
             //    ImGui::Text("(hit D to show/hide info)");
             //    ImGui::End();
             //}
-
-
             // Time/FPS measurement
             now = glfwGetTime();
-            previous_frame_render_time = now - frame_begin_timepoint; //compute delta_t
+            delta_t = now - frame_begin_timepoint; //compute delta_t
             frame_begin_timepoint = now; // set new start
 
             fps_counter_frames++;
@@ -369,7 +375,7 @@ bool App::init(void)
 
 void App::init_assets(void) {
     // all shaders: load, compile, link, initialize params, place to library
-    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(std::filesystem::path("resources/basic_core.vert"), std::filesystem::path("resources/basic_uniform.frag")));
+    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(std::filesystem::path("resources/basic_core.vert"), std::filesystem::path("resources/basic_core.frag")));
 
     // mesh library: meshes, that can be shared by multiple models
     //mesh_library.emplace("teapot", std::make_shared<Mesh>(generateCube()));
@@ -434,6 +440,7 @@ void App::init_glfw(void)
     glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
     glfwSetKeyCallback(window, glfw_key_callback);
     glfwSetScrollCallback(window, glfw_scroll_callback);
+    glfwSetCursorPosCallback(window, glfw_cursor_pos_callback);
 }
 
 void App::init_gl_debug(void) {
@@ -611,9 +618,6 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
             glfwSwapInterval(this_inst->is_vsync_on);
             std::cout << "VSync: " << this_inst->is_vsync_on << "\n";
             break;
-        case GLFW_KEY_D:
-            this_inst->show_info = !this_inst->show_info;
-            break;
         default:
             break;
         }
@@ -621,13 +625,47 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 }
 
 void App::glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    if (yoffset > 0.0) {
-        std::cout << "wheel up...\n";
-    }
+    // get App instance
+    auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+    this_inst->fov -= 10 * yoffset; // yoffset is mostly +1 or -1; one degree difference in fov is not visible
+    this_inst->fov = std::clamp(this_inst->fov, 20.0f, 170.0f); // limit FOV to reasonable values...
+
+    this_inst->update_projection_matrix();
+}
+
+void App::glfw_cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
+    auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+    app->camera.ProcessMouseMovement(xpos - app->cursor_last_x, (ypos - app->cursor_last_y) * -1.0);
+    app->cursor_last_x = xpos;
+    app->cursor_last_y = ypos;
 }
 
 void App::glfw_framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+    this_inst->width = width;
+    this_inst->height = height;
 
+    // set viewport
+    glViewport(0, 0, width, height);
+    //now your canvas has [0,0] in bottom left corner, and its size is [width x height] 
+
+    this_inst->update_projection_matrix();
+}
+
+void App::update_projection_matrix(void)
+{
+    if (height < 1)
+        height = 1;   // avoid division by 0
+
+    float ratio = static_cast<float>(width) / height;
+
+    projection_matrix = glm::perspective(
+        glm::radians(fov),   // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90° (extra wide) and 30° (quite zoomed in)
+        ratio,               // Aspect Ratio. Depends on the size of your window.
+        0.1f,                // Near clipping plane. Keep as big as possible, or you'll get precision issues.
+        20000.0f             // Far clipping plane. Keep as little as possible.
+    );
 }
 
 void App::glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
