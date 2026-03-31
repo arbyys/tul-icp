@@ -20,6 +20,8 @@ bool read_all_lines(const std::filesystem::path& filename, std::vector<std::stri
 		buffer.push_back(line);
 	}
 	file_reader.close();
+
+	return true;
 }
 
 bool loadOBJ(const std::filesystem::path& filename, std::vector<Vertex>& vertices, std::vector<GLuint>& indices)

@@ -5,8 +5,6 @@ project(icp VERSION 2025.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_BUILD_TYPE Release)
-
 find_package(glm           CONFIG REQUIRED)
 find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
@@ -23,6 +21,9 @@ file(GLOB_RECURSE PROJECT_SOURCES
     src/*.cpp
     src/*.h
 )
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/build/debug)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/build/release)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 

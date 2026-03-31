@@ -10,34 +10,34 @@ class Camera
 public:
 
     // Camera Attributes
-    glm::vec3 Position{};
-    glm::vec3 Front{};
-    glm::vec3 Right{};
-    glm::vec3 Up{}; // camera local UP vector
+    glm::vec3 position{};
+    glm::vec3 front{};
+    glm::vec3 right{};
+    glm::vec3 up{}; // camera local UP vector
 
-    GLfloat Yaw = -90.0f;
-    GLfloat Pitch = 0.0f;;
-    GLfloat Roll = 0.0f;
+    GLfloat yaw = -90.0f;
+    GLfloat pitch = 0.0f;;
+    GLfloat roll = 0.0f;
 
     // Camera options
-    GLfloat MovementSpeed = 1.0f;
-    GLfloat MouseSensitivity = 0.25f;
+    GLfloat movement_speed = 1.0f;
+    GLfloat mouse_sensitivity = 0.25f;
 
     Camera() {
         // Default constructor initializes camera's position and orientation
-        this->updateCameraVectors();
+        this->update_camera_vectors();
     }
 
-    Camera(glm::vec3 position) :Position(position)
+    Camera(glm::vec3 position) :position(position)
     {
-        this->Up = glm::vec3(0.0f, 1.0f, 0.0f);
+        this->up = glm::vec3(0.0f, 1.0f, 0.0f);
         // initialization of the camera reference system
-        this->updateCameraVectors();
+        this->update_camera_vectors();
     }
 
-    glm::mat4 GetViewMatrix()
+    glm::mat4 get_view_matrix()
     {
-        return glm::lookAt(this->Position, this->Position + this->Front, this->Up);
+        return glm::lookAt(this->position, this->position + this->front, this->up);
     }
 
     glm::vec3 process_input(GLFWwindow* window, GLfloat deltaTime)
@@ -45,49 +45,50 @@ public:
         glm::vec3 direction{ 0 };
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            direction += Front; // add unit vector to final direction  
+            direction += front; // add unit vector to final direction  
 
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            direction -= Front;
+            direction -= front;
 
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            direction -= Right;
+            direction -= right;
 
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            direction += Right;
+            direction += right;
 
-        glm::vec3 movement = glm::normalize(direction) * MovementSpeed * deltaTime;
+
+        glm::vec3 movement = direction == glm::vec3(0) ? glm::vec3(0) : glm::normalize(direction)* movement_speed* deltaTime;
         return movement;
     }
 
-    void ProcessMouseMovement(GLfloat xoffset, GLfloat yoffset, GLboolean constraintPitch = GL_TRUE)
+    void process_mouse_movement(GLfloat xoffset, GLfloat yoffset, GLboolean constraintPitch = GL_TRUE)
     {
-        xoffset *= this->MouseSensitivity;
-        yoffset *= this->MouseSensitivity;
+        xoffset *= this->mouse_sensitivity;
+        yoffset *= this->mouse_sensitivity;
 
-        this->Yaw += xoffset;
-        this->Pitch += yoffset;
+        this->yaw += xoffset;
+        this->pitch += yoffset;
 
         if (constraintPitch)
         {
-            if (this->Pitch > 89.0f)
-                this->Pitch = 89.0f;
-            if (this->Pitch < -89.0f)
-                this->Pitch = -89.0f;
+            if (this->pitch > 89.0f)
+                this->pitch = 89.0f;
+            if (this->pitch < -89.0f)
+                this->pitch = -89.0f;
         }
 
-        this->updateCameraVectors();
+        this->update_camera_vectors();
     }
 
 private:
-    void updateCameraVectors() {
+    void update_camera_vectors() {
         glm::vec3 front;
-        front.x = cos(glm::radians(this->Yaw)) * cos(glm::radians(this->Pitch));
-        front.y = sin(glm::radians(this->Pitch));
-        front.z = sin(glm::radians(this->Yaw)) * cos(glm::radians(this->Pitch));
+        front.x = cos(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));
+        front.y = sin(glm::radians(this->pitch));
+        front.z = sin(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));
 
-        this->Front = glm::normalize(front);
-        this->Right = glm::normalize(glm::cross(this->Front, glm::vec3(0.0f, 1.0f, 0.0f)));
-        this->Up = glm::normalize(glm::cross(this->Right, this->Front));
+        this->front = glm::normalize(front);
+        this->right = glm::normalize(glm::cross(this->front, glm::vec3(0.0f, 1.0f, 0.0f)));
+        this->up = glm::normalize(glm::cross(this->right, this->front));
     }
 };

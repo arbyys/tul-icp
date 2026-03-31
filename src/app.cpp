@@ -142,7 +142,13 @@ int App::run(void)
 
         // Get uniform location in GPU program. This will not change, so it can be moved out of the game loop.
 
+        // get first position of mouse cursor
+        glfwGetCursorPos(window, &cursor_last_x, &cursor_last_y);
 
+        camera.position = glm::vec3(0, 0, 10);
+
+        width = fb_width;
+        height = fb_height;
 
         while (!glfwWindowShouldClose(window))
         {
@@ -161,12 +167,16 @@ int App::run(void)
             auto current_shader = shader_library.at("simple_shader");
             //set transformations
             glm::vec3 movement = camera.process_input(window, delta_t);
-            camera.Position += movement;
+            camera.position += movement;
             //std::cout << movement << std::endl;
 
             // set uniforms for shader - common for all objects (do not set for each object individually, they use same shader anyway)
-            current_shader->setUniform("uV_m", camera.GetViewMatrix());
+            current_shader->setUniform("uV_m", camera.get_view_matrix());
             current_shader->setUniform("uP_m", projection_matrix);
+
+            
+            std::cout << "view: " << glm::to_string(camera.get_view_matrix()) << std::endl;
+            std::cout << "proj: " << glm::to_string(projection_matrix) << std::endl;
 
             for (auto& [name, model] : scene) {
                 model.draw();
@@ -364,6 +374,11 @@ bool App::init(void)
         // When all is loaded, show the window.
         glfwShowWindow(window);
 
+        glEnable(GL_DEPTH_TEST);
+        // assume ALL objects are non-transparent 
+        glCullFace(GL_BACK);
+        glEnable(GL_CULL_FACE);
+
     }
     catch (std::exception const& e) {
         std::cerr << "Init failed : " << e.what() << std::endl;
@@ -375,13 +390,19 @@ bool App::init(void)
 
 void App::init_assets(void) {
     // all shaders: load, compile, link, initialize params, place to library
-    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(std::filesystem::path("resources/basic_core.vert"), std::filesystem::path("resources/basic_core.frag")));
+    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(std::filesystem::path("resources/shaders/tex.vert"), std::filesystem::path("resources/shaders/tex.frag")));
 
     // mesh library: meshes, that can be shared by multiple models
     //mesh_library.emplace("teapot", std::make_shared<Mesh>(generateCube()));
+
+    // create default texture
+    Texture::init_chkboard();
+
+    // load textures
+    texture_library.emplace("wood_box", std::make_shared<Texture>("resources/textures/box_rgb888.png"));
     std::unordered_map<std::string, std::filesystem::path> filepaths = {
-        { "teapot", "resources/teapot_tri_vnt.obj" },
-        { "sphere", "resources/sphere_tri_vnt.obj" }
+        { "teapot", "resources/models/teapot_tri_vnt.obj" },
+        { "sphere", "resources/models/sphere_tri_vnt.obj" }
     };
 
     for (const auto& [name, path] : filepaths) {
@@ -399,7 +420,7 @@ void App::init_assets(void) {
     }
 
     Model m;
-    m.addMesh(mesh_library.at("sphere"), shader_library.at("simple_shader"));
+    m.addMesh(mesh_library.at("sphere"), shader_library.at("simple_shader"), texture_library.at("wood_box"));
     scene.emplace("teapot", m);
 }
 
@@ -441,6 +462,10 @@ void App::init_glfw(void)
     glfwSetKeyCallback(window, glfw_key_callback);
     glfwSetScrollCallback(window, glfw_scroll_callback);
     glfwSetCursorPosCallback(window, glfw_cursor_pos_callback);
+
+    // antialiasing
+    glfwWindowHint(GLFW_SAMPLES, 4);
+    glEnable(GL_MULTISAMPLE);
 }
 
 void App::init_gl_debug(void) {
@@ -629,14 +654,13 @@ void App::glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffse
     auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
     this_inst->fov -= 10 * yoffset; // yoffset is mostly +1 or -1; one degree difference in fov is not visible
     this_inst->fov = std::clamp(this_inst->fov, 20.0f, 170.0f); // limit FOV to reasonable values...
-
     this_inst->update_projection_matrix();
 }
 
 void App::glfw_cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
-    app->camera.ProcessMouseMovement(xpos - app->cursor_last_x, (ypos - app->cursor_last_y) * -1.0);
+    app->camera.process_mouse_movement(xpos - app->cursor_last_x, (ypos - app->cursor_last_y) * -1.0);
     app->cursor_last_x = xpos;
     app->cursor_last_y = ypos;
 }
@@ -659,6 +683,8 @@ void App::update_projection_matrix(void)
         height = 1;   // avoid division by 0
 
     float ratio = static_cast<float>(width) / height;
+    std::cout << "fov: " << fov << std::endl;
+    std::cout << "ratio: " << ratio << std::endl;
 
     projection_matrix = glm::perspective(
         glm::radians(fov),   // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90° (extra wide) and 30° (quite zoomed in)

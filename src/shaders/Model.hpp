@@ -13,6 +13,7 @@
 #include "Vertex.hpp"
 #include "Mesh.hpp"
 #include "ShaderProgram.hpp"
+#include "Texture.hpp"
 
 class Model 
 {
@@ -47,6 +48,7 @@ public:
     struct mesh_package {
         std::shared_ptr<Mesh> mesh;         // geometry & topology, vertex attributes
         std::shared_ptr<ShaderProgram> shader;     // which shader to use to draw this part of the model
+        std::shared_ptr<Texture> texture;
 
         glm::vec3 origin;                   // mesh origin relative to origin of the whole model
         glm::vec3 eulerAngles;              // mesh rotation relative to orientation of the whole model
@@ -56,24 +58,17 @@ public:
     std::vector<mesh_package> meshes;
 
     Model() = default;
-    Model(const std::filesystem::path& filename, std::shared_ptr<ShaderProgram> shader) {
-        // Load mesh (all meshes) of the model, (in the future: load material of each mesh, load textures...)
-        // notice: you can load multiple meshes and place them to proper positions, 
-        //            multiple textures (with reusing) etc. to construct single complicated Model   
-        //
-        // This can be done by extending OBJ file parser (OBJ can load hierarchical models),
-        // or by your own JSON model specification (or keep it simple and set a rule: 1model=1mesh ...) 
-        //
-    }
 
-    void addMesh(std::shared_ptr<Mesh> mesh,
+    void addMesh(
+        std::shared_ptr<Mesh> mesh,
         std::shared_ptr<ShaderProgram> shader,
+        std::shared_ptr<Texture> text = std::make_shared<Texture>(),
         glm::vec3 origin = glm::vec3(0.0f),      // dafault value
         glm::vec3 eulerAngles = glm::vec3(0.0f), // dafault value
         glm::vec3 scale = glm::vec3(1.0f)       // dafault value
     ) 
     {
-        meshes.emplace_back(mesh, shader, origin, eulerAngles, scale);
+        meshes.emplace_back(mesh, shader, text, origin, eulerAngles, scale);
     }
 
     void setPosition(const glm::vec3& new_position) {
@@ -118,7 +113,8 @@ public:
 
             glm::mat4 mesh_model_matrix = createMM(mesh_pkg.origin, mesh_pkg.eulerAngles, mesh_pkg.scale);
             mesh_pkg.shader->setUniform("uM_m", mesh_model_matrix * local_model_matrix);
-
+            mesh_pkg.texture->bind();               // NEW: use proper texture
+            mesh_pkg.shader->setUniform("tex0", 0); // NEW: send active texture unit to shader
             mesh_pkg.mesh->draw();   // draw mesh
         }
     }

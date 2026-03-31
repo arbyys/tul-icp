@@ -15,6 +15,7 @@
 #include "shaders/Mesh.hpp"
 #include "shaders/Model.hpp"
 #include "camera.hpp"
+#include "shaders/Texture.hpp"
 
 class App {
 public:
@@ -118,5 +119,8 @@ private:
 
     // all objects of the scene addressable by name
     std::unordered_map<std::string, Model> scene;
+
+    // shared library of textures for all models, automatic resource management 
+    std::unordered_map<std::string, std::shared_ptr<Texture>> texture_library;
 };
 

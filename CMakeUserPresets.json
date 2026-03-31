@@ -4,9 +4,9 @@
     {
       "name": "default",
       "inherits": "vcpkg",
-        "environment": {
-            "VCPKG_ROOT": "C:\\Users\\Bagr\\Desktop\\schoolshit\\icp\\vcpkg"
-        }
+      "environment": {
+        "VCPKG_ROOT": "C:\\Users\\Bagr\\Desktop\\schoolshit\\icp\\vcpkg"
+      }
     }
   ]
 }
