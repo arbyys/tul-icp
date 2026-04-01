@@ -4,7 +4,7 @@
     "glfw3",
     "glm",
     "nlohmann-json",
-    "fmt",
+    "stb",
     {
       "name": "imgui",
       "features": [

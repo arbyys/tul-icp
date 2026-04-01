@@ -10,6 +10,7 @@ find_package(GLEW                 REQUIRED)
 find_package(glfw3         CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(imgui                REQUIRED) 
+find_package(Stb                  REQUIRED)
 
 if(WIN32)
     find_package(OpenCV CONFIG REQUIRED PATHS "C:/opencv/build")
@@ -45,7 +46,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${OpenCV_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS},
+    ${Stb_INCLUDE_DIR}
 )
 
 configure_file("app_settings.json" "app_settings.json" COPYONLY)

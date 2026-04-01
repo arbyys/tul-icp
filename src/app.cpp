@@ -11,6 +11,7 @@
 #include <thread>
 #include <filesystem>
 #include <fstream>
+#include <cmath>
 
 // OpenCV 
 #include <opencv2\opencv.hpp>
@@ -29,6 +30,10 @@
 #include <imgui.h>               // main ImGUI header
 #include <imgui_impl_glfw.h>     // GLFW bindings
 #include <imgui_impl_opengl3.h>  // OpenGL bindings
+
+// stb (for screenshots)
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 
 // local stuff
@@ -166,17 +171,15 @@ int App::run(void)
             // set shader uniforms once (if all models use same shader)
             auto current_shader = shader_library.at("simple_shader");
             //set transformations
-            glm::vec3 movement = camera.process_input(window, delta_t);
-            camera.position += movement;
+            if (scene_in_focus) {
+                glm::vec3 movement = camera.process_input(window, delta_t);
+                camera.position += movement;
+            }
             //std::cout << movement << std::endl;
 
             // set uniforms for shader - common for all objects (do not set for each object individually, they use same shader anyway)
             current_shader->setUniform("uV_m", camera.get_view_matrix());
             current_shader->setUniform("uP_m", projection_matrix);
-
-            
-            std::cout << "view: " << glm::to_string(camera.get_view_matrix()) << std::endl;
-            std::cout << "proj: " << glm::to_string(projection_matrix) << std::endl;
 
             for (auto& [name, model] : scene) {
                 model.draw();
@@ -184,6 +187,15 @@ int App::run(void)
 
             // unbind framebuffer
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+            auto& io = ImGui::GetIO();
+
+            if (scene_in_focus) {
+                io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+            }
+            else {
+                io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+            }
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
@@ -203,12 +215,12 @@ int App::run(void)
             // ImGui prepare render (only if required)
             ImGui::Begin("Main", 0, flags);
 
-            const float window_width = ImGui::GetContentRegionAvail().x;
-            const float window_height = ImGui::GetContentRegionAvail().y;
+            const float window_width = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+            const float window_height = std::max(1.0f, ImGui::GetContentRegionAvail().y);
 
             const float console_height = 0.2f;
             const float scene_height = window_height * (1.0f - console_height);
-            const float scene_width = 0.5f * window_width;
+            const float scene_width = 0.7f * window_width;
 
             // scene part of the main window
             ImGui::BeginChild("ScenePanel", ImVec2(scene_width, scene_height), true, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
@@ -221,18 +233,55 @@ int App::run(void)
             );
             ImGui::EndChild();
             
+            float info_width = 0.4f;
+
+            // info panel 
             ImGui::SameLine();
+            ImGui::BeginChild("InfoPanel", ImVec2((window_width - scene_width) * info_width, scene_height * 0.5), true);
+            GLint major = 0, minor = 0;
+            glGetIntegerv(GL_MAJOR_VERSION, &major);
+            glGetIntegerv(GL_MINOR_VERSION, &minor);
+            ImGui::Text("OpenGL version: %d.%d", major, minor);
+            GLint profile = 0;
+            glGetIntegerv(GL_CONTEXT_PROFILE_MASK, &profile);
+            std::string profile_string = "";
+            if (profile & GL_CONTEXT_CORE_PROFILE_BIT)
+                profile_string += "core ";
+
+            if (profile & GL_CONTEXT_COMPATIBILITY_PROFILE_BIT)
+                profile_string += "compatibility";
+            ImGui::Text("OpenGL profile: %s", profile_string.c_str());
+            ImGui::Text("           FPS: %.1f", fps);
+            ImGui::Text("         Vsync: %s", is_vsync_on ? "ON" : "OFF");
+            ImGui::Text("            AA: %s", antialiasing_on ? "ON" : "OFF");
+            ImGui::EndChild();
+
+            // controls panel
+            ImGui::SameLine();
+            ImGui::BeginChild("ControlsPanel", ImVec2((window_width - scene_width) * (1 - info_width) - 16, scene_height * 0.5), true);
+            ImGui::Text("Mouse movement controls camera");
+            ImGui::Text("WASD to move");
+            ImGui::Text("F to toggle fullscreen");
+            ImGui::Text("V to toggle vsync");
+            ImGui::Text("X to toggle scene focus");
+            ImGui::Text("F1 to take screenshot");
+            ImGui::Text("F2 to toggle antialiasing");
+            ImGui::EndChild();
 
             // camera part of the main window
-            ImGui::BeginChild("CameraPanel", ImVec2(window_width - scene_width, scene_height), true);
+            int camera_offset_x = 15;
+            int camera_offset_y = 30;
+            ImGui::SetCursorPosX(scene_width + camera_offset_x);
+            ImGui::SetCursorPosY(scene_height * 0.5 + camera_offset_y);
+            ImGui::BeginChild("CameraPanel", ImVec2(window_width - scene_width - 8, scene_height * 0.5), true);
             ImGui::Text("Camera");
             //ImGui::Image(cameraTex, ImVec2(cameraWidth, topHeight - 20));
             ImGui::EndChild();
             
             // console part of the main window
-            ImGui::BeginChild("ConsolePanel", ImVec2(window_width, window_height * console_height), true);
+            ImGui::BeginChild("ConsolePanel", ImVec2(window_width, window_height * console_height), true, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
             // Child window for scrolling region
-            ImGui::BeginChild("ConsoleScrollRegion", ImVec2(0, 0), true);
+            ImGui::BeginChild("ConsoleScrollRegion", ImVec2(window_width, windowed_height * console_height - 20), true);
 
             for (int i = 0; i < console_lines.size(); i++)
             {
@@ -464,8 +513,8 @@ void App::init_glfw(void)
     glfwSetCursorPosCallback(window, glfw_cursor_pos_callback);
 
     // antialiasing
-    glfwWindowHint(GLFW_SAMPLES, 4);
-    glEnable(GL_MULTISAMPLE);
+    glfwWindowHint(GLFW_SAMPLES, antialiasing_level);
+    toggle_aliasing();
 }
 
 void App::init_gl_debug(void) {
@@ -582,40 +631,60 @@ void App::tracker_thread(cv::VideoCapture& capture) {
 
 void App::init_framebuffer() {
 
-    glGenFramebuffers(1, &FBO_ID);
-    glBindFramebuffer(GL_FRAMEBUFFER, FBO_ID);
+    // Create framebuffer
+    glCreateFramebuffers(1, &FBO_ID);
 
-    // Color texture
-    glGenTextures(1, &texture_id);
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fb_width, fb_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_id, 0);
+    // --- Color texture ---
+    glCreateTextures(GL_TEXTURE_2D, 1, &texture_id);
+    glTextureStorage2D(texture_id, 1, GL_RGBA8, fb_width, fb_height);
 
-    // Depth buffer
-    glGenRenderbuffers(1, &RBO_ID);
-    glBindRenderbuffer(GL_RENDERBUFFER, RBO_ID);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, fb_width, fb_height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO_ID);
+    glTextureParameteri(texture_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(texture_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    // Attach texture to framebuffer
+    glNamedFramebufferTexture(FBO_ID, GL_COLOR_ATTACHMENT0, texture_id, 0);
+
+    // --- Depth/stencil renderbuffer ---
+    glCreateRenderbuffers(1, &RBO_ID);
+    glNamedRenderbufferStorage(RBO_ID, GL_DEPTH24_STENCIL8, fb_width, fb_height);
+
+    // Attach renderbuffer
+    glNamedFramebufferRenderbuffer(
+        FBO_ID,
+        GL_DEPTH_STENCIL_ATTACHMENT,
+        GL_RENDERBUFFER,
+        RBO_ID
+    );
+
+    // Specify draw buffers (important in DSA!)
+    GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0 };
+    glNamedFramebufferDrawBuffers(FBO_ID, 1, drawBuffers);
+
+    // Check completeness
+    if (glCheckNamedFramebufferStatus(FBO_ID, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         printf("FBO not complete!\n");
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void App::rescale_framebuffer(float width, float height)
-{
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_id, 0);
+void App::rescale_framebuffer(int width, int height) {
+    // Resize color texture
+    glTextureStorage2D(texture_id, 1, GL_RGB8, width, height);  // immutable storage
 
-    glBindRenderbuffer(GL_RENDERBUFFER, RBO_ID);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO_ID);
+    // If you want to reset filtering (optional if it hasn't changed)
+    glTextureParameteri(texture_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(texture_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Reattach texture to framebuffer (optional, usually stays attached)
+    glNamedFramebufferTexture(FBO_ID, GL_COLOR_ATTACHMENT0, texture_id, 0);
+
+    // Resize depth/stencil renderbuffer
+    glNamedRenderbufferStorage(RBO_ID, GL_DEPTH24_STENCIL8, width, height);
+
+    // Reattach renderbuffer (optional, usually stays attached)
+    glNamedFramebufferRenderbuffer(FBO_ID, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO_ID);
+
+    // Optional: ensure draw buffers are still set
+    GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0 };
+    glNamedFramebufferDrawBuffers(FBO_ID, 1, drawBuffers);
 }
 
 void App::add_console_log(const char* msg) {
@@ -632,17 +701,53 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 {
     auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
     if ((action == GLFW_PRESS) || (action == GLFW_REPEAT)) {
+        GLint stat;
         switch (key) {
         case GLFW_KEY_ESCAPE:
             // Exit The App
             glfwSetWindowShouldClose(window, GLFW_TRUE);
             break;
+
         case GLFW_KEY_V:
             // Vsync on/off
             this_inst->is_vsync_on = !this_inst->is_vsync_on;
             glfwSwapInterval(this_inst->is_vsync_on);
-            std::cout << "VSync: " << this_inst->is_vsync_on << "\n";
             break;
+
+        case GLFW_KEY_F:
+            // fullscreen toggle
+            this_inst->fullscreen = !this_inst->fullscreen;
+            this_inst->ToggleFullscreen(window);
+            break;
+        
+        case GLFW_KEY_F1:
+            // take screenshot
+            this_inst->take_screenshot_fbo(0, this_inst->width, this_inst->height, this_inst->get_timestamp_filename("bruhapp"));
+            break;
+
+        case GLFW_KEY_F2:
+            // toggle antialiasing
+            this_inst->antialiasing_on = !this_inst->antialiasing_on;
+            this_inst->toggle_aliasing();
+            
+            break;
+
+        case GLFW_KEY_X:
+            // focus toggle
+            // 3 things:
+            // toggle ImGui inputs
+            // toggle cursor visibility
+            // toggle camera movement
+            // optionally disable time passing in scene?
+            this_inst->scene_in_focus = !this_inst->scene_in_focus;
+
+            if (this_inst->scene_in_focus) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            }
+            else {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+
         default:
             break;
         }
@@ -652,6 +757,8 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
 void App::glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     // get App instance
     auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+    if (!this_inst->scene_in_focus) return;
+
     this_inst->fov -= 10 * yoffset; // yoffset is mostly +1 or -1; one degree difference in fov is not visible
     this_inst->fov = std::clamp(this_inst->fov, 20.0f, 170.0f); // limit FOV to reasonable values...
     this_inst->update_projection_matrix();
@@ -660,7 +767,8 @@ void App::glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffse
 void App::glfw_cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
     auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
-    app->camera.process_mouse_movement(xpos - app->cursor_last_x, (ypos - app->cursor_last_y) * -1.0);
+    if (app->scene_in_focus)
+        app->camera.process_mouse_movement(xpos - app->cursor_last_x, (ypos - app->cursor_last_y) * -1.0);
     app->cursor_last_x = xpos;
     app->cursor_last_y = ypos;
 }
@@ -683,8 +791,6 @@ void App::update_projection_matrix(void)
         height = 1;   // avoid division by 0
 
     float ratio = static_cast<float>(width) / height;
-    std::cout << "fov: " << fov << std::endl;
-    std::cout << "ratio: " << ratio << std::endl;
 
     projection_matrix = glm::perspective(
         glm::radians(fov),   // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90° (extra wide) and 30° (quite zoomed in)
@@ -789,4 +895,92 @@ std::string App::SanitizeUTF8(const char* msg)
         p++;
     }
     return out;
+}
+
+void App::ToggleFullscreen(GLFWwindow* window)
+{
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+
+    if (fullscreen) {
+        // Save the current window position and size
+        glfwGetWindowPos(window, &window_x, &window_y);
+        glfwGetWindowSize(window, &windowed_width, &windowed_height);
+
+        // Switch to fullscreen
+        glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, GLFW_DONT_CARE);
+    }
+    else {
+        // Restore the previous window position and size
+        glfwSetWindowMonitor(window, NULL, window_x, window_y, windowed_width, windowed_height, GLFW_DONT_CARE);
+    }
+}
+
+void App::take_screenshot_fbo(GLuint fbo, int width, int height, std::string filename)
+{
+    // Bind FBO as read framebuffer temporarily
+    GLint prevReadFBO;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFBO);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+
+    // Allocate buffer for RGBA8 pixels
+    std::vector<unsigned char> pixels(width * height * 4);
+
+    // Read pixels from the framebuffer
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+    // Restore previous read framebuffer
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFBO);
+
+    // Flip vertically (OpenGL origin is bottom-left)
+    for (int y = 0; y < height / 2; ++y) {
+        for (int x = 0; x < width * 4; ++x) {
+            std::swap(pixels[y * width * 4 + x], pixels[(height - 1 - y) * width * 4 + x]);
+        }
+    }
+
+    // Save to PNG
+    std::cout << "saved image at " << filename << std::endl;
+    // check if screenshots folder exists
+    // if not, create it
+    std::string path = ensure_dir_and_get_filename(screenshot_folder, filename);
+
+    stbi_write_png(path.c_str(), width, height, 4, pixels.data(), width * 4);
+}
+
+std::string App::get_timestamp_filename(const std::string& prefix, const std::string& ext)
+{
+    // Get current time
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+
+    // Convert to local time
+    std::tm tm;
+    localtime_s(&tm, &t);
+
+    // Format as YYYYMMDD_HHMMSS
+    std::ostringstream oss;
+    oss << prefix << "_"
+        << std::put_time(&tm, "%Y%m%d_%H%M%S")
+        << "." << ext;
+
+    return oss.str();
+}
+
+std::string App::ensure_dir_and_get_filename(const std::string& folder, const std::string& filename)
+{
+    std::filesystem::path dir(folder);
+    if (!std::filesystem::exists(dir)) {
+        std::filesystem::create_directories(dir); // Creates folder and any missing parent folders
+    }
+    return (dir / filename).string();
+}
+
+void App::toggle_aliasing(void) {
+    if (antialiasing_on) {
+        glEnable(GL_MULTISAMPLE);
+    }
+    else {
+        glDisable(GL_MULTISAMPLE);
+    }
 }

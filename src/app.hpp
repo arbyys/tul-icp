@@ -57,6 +57,7 @@ private:
     GLFWwindow* window = nullptr;
     void destroy(void);
 
+    // openGL IDs
     GLuint shader_prog_ID{ 0 };
     GLuint VBO_ID{ 0 };
     GLuint VAO_ID{ 0 };
@@ -67,14 +68,33 @@ private:
     // vsync enabled
     bool is_vsync_on{ true };
 
-    // should be ImGUI window displayed?
-    bool show_info{ true };
+    // fullscreen stuff
+    bool fullscreen = false;
+    void ToggleFullscreen(GLFWwindow* window);
+    int windowed_width = 0;
+    int windowed_height = 0;
+    int window_x = 0;
+    int window_y = 0;
+
+    // screenshot stuff
+    std::string screenshot_folder = "screenshots";
+    std::string ensure_dir_and_get_filename(const std::string& folder, const std::string& filename);
+    std::string get_timestamp_filename(const std::string& prefix = "screenshot", const std::string& ext = "png");
+    void take_screenshot_fbo(GLuint fbo, int width, int height, std::string filename);
+
+    // antialiasing stuff
+    bool antialiasing_on = false;
+    int antialiasing_level = 2;
+    void toggle_aliasing(void);
+
+    // focus toggle
+    bool scene_in_focus = false;
 
     // init stuff
     void init_opencv();
     void init_glew(void);
     void init_glfw(void);
-    void init_gl_debug();
+    void init_gl_debug(void);
     void init_assets(void);
     void init_imgui(void);
 
@@ -82,7 +102,7 @@ private:
     int fb_width = 1920;
     int fb_height = 1080;
     void init_framebuffer(void);
-    void rescale_framebuffer(float width, float height);
+    void rescale_framebuffer(int width, int height);
 
     // camera related 
     Camera camera;
