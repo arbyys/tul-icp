@@ -50,9 +50,8 @@ GLint ShaderProgram::getAttribLocation(const std::string& name) {
     GLint loc = glGetAttribLocation(ID, name.c_str());
     if (loc == -1) {
         std::cerr << "No vertex attribute with name: " << name << ", or reserved name (starting with gl_)\n";
-        return loc;
-
     }
+    return loc;
 }
 
 // Uniform setting

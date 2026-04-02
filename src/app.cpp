@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <fstream>
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 
 // OpenCV 
 #include <opencv2\opencv.hpp>
@@ -42,6 +44,65 @@
 #include "fpsmeter.hpp"
 #include "dequeue.hpp"
 #include "shaders/OBJLoader.hpp"
+
+namespace {
+std::vector<App::PlanetParams> create_default_planets_params()
+{
+    auto make_planet = [](
+        const std::string& name,
+        const std::filesystem::path& model_path,
+        const std::filesystem::path& texture_path,
+        const std::filesystem::path& audio_path,
+        const std::string& audio_key,
+        float audio_min_distance,
+        float audio_max_distance,
+        float x_position) {
+            App::PlanetParams params;
+            params.name = name;
+            params.model_path = model_path;
+            params.default_texture_path = texture_path;
+            params.audio_path = audio_path;
+            params.audio_key = audio_key;
+            params.audio_min_distance = audio_min_distance;
+            params.audio_max_distance = audio_max_distance;
+            params.start_position = glm::vec3(x_position, 0.0f, 0.0f);
+            params.start_rotation = glm::vec3(90.0f, 0.0f, 0.0f);
+            params.start_scale = glm::vec3(1.0f, 1.0f, 1.0f);
+            return params;
+    };
+
+    std::vector<App::PlanetParams> planets = {
+        make_planet("sun", "resources/models/planets/sun.obj", "resources/textures/sun.jpeg", "resources/audio/planets/sun.mp3", "snd_planet_sun", 5.0f, 2000.0f, 0.0f),
+        make_planet("mercury", "resources/models/planets/mercury.obj", "resources/textures/mercury.jpg", "resources/audio/planets/mercury.mp3", "snd_planet_mercury", 5.0f, 1000.0f, 8.0f),
+        make_planet("venus", "resources/models/planets/venus.obj", "resources/textures/venus_1.png", "resources/audio/planets/venus.mp3", "snd_planet_venus", 5.0f, 1000.0f, 16.0f),
+        make_planet("earth", "resources/models/planets/earth.obj", "resources/textures/earth.jpg", "resources/audio/planets/earth.mp3", "snd_planet_earth", 5.0f, 1000.0f, 24.0f),
+        make_planet("mars", "resources/models/planets/mars.obj", "resources/textures/mars.jpg", "resources/audio/planets/mars.mp3", "snd_planet_mars", 5.0f, 1000.0f, 32.0f),
+        make_planet("jupiter", "resources/models/planets/jupiter.obj", "resources/textures/jupiter.jpeg", "resources/audio/planets/jupiter.mp3", "snd_planet_jupiter", 8.0f, 1600.0f, 40.0f),
+        make_planet("saturn", "resources/models/planets/saturn.obj", "resources/textures/saturn.png", "resources/audio/planets/saturn.mp3", "snd_planet_saturn", 8.0f, 1600.0f, 48.0f),
+        make_planet("uranus", "resources/models/planets/uranus.obj", "resources/textures/uranus.jpeg", "resources/audio/planets/uranus.mp3", "snd_planet_uranus", 8.0f, 1600.0f, 56.0f),
+        make_planet("neptune", "resources/models/planets/neptune.obj", "resources/textures/neptune_base.jpg", "resources/audio/planets/neptune.mp3", "snd_planet_neptune", 8.0f, 1600.0f, 64.0f)
+    };
+
+    planets[6].material_textures = {
+        { "mat0", "resources/textures/saturn_moons.jpeg" },
+        { "mat2", "resources/textures/saturn_rings.png" }
+    };
+
+    planets[8].material_textures = {
+        { "mat2", "resources/textures/neptune_atmosfera_1.jpg" },
+        { "mat3", "resources/textures/neptune_atmosfera_2.jpg" },
+        { "mat4", "resources/textures/neptune_atmosfera_3.jpg" },
+        { "mat5", "resources/textures/neptune_atmosfera_3.jpg" },
+        { "mat6", "resources/textures/neptune_atmosfera_3.jpg" },
+        { "mat7", "resources/textures/neptune_atmosfera_3.jpg" },
+        { "mat8", "resources/textures/neptune_atmosfera_3.jpg" },
+        { "mat9", "resources/textures/neptune_atmosfera_3.jpg" },
+        { "mat10", "resources/textures/neptune_atmosfera_3.jpg" }
+    };
+
+    return planets;
+}
+}
 
 void App::draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int size)
 {
@@ -111,6 +172,7 @@ std::vector<cv::Point2f> App::find_faces(cv::Mat& frame)
 }
 
 App::App()
+    : planets_params(create_default_planets_params())
 {
     // default constructor
     // nothing to do here (so far...)
@@ -150,10 +212,11 @@ int App::run(void)
         // get first position of mouse cursor
         glfwGetCursorPos(window, &cursor_last_x, &cursor_last_y);
 
-        camera.position = glm::vec3(0, 0, 10);
+        camera.position = glm::vec3(0, 0, 40);
 
         width = fb_width;
         height = fb_height;
+        update_projection_matrix();
 
         while (!glfwWindowShouldClose(window))
         {
@@ -171,10 +234,13 @@ int App::run(void)
             // set shader uniforms once (if all models use same shader)
             auto current_shader = shader_library.at("simple_shader");
             //set transformations
+            update_planets(static_cast<float>(delta_t));
             if (scene_in_focus) {
                 glm::vec3 movement = camera.process_input(window, delta_t);
                 camera.position += movement;
+                resolve_player_planet_collisions();
             }
+            update_spatial_audio();
             //std::cout << movement << std::endl;
 
             // set uniforms for shader - common for all objects (do not set for each object individually, they use same shader anyway)
@@ -261,11 +327,22 @@ int App::run(void)
             ImGui::BeginChild("ControlsPanel", ImVec2((window_width - scene_width) * (1 - info_width) - 16, scene_height * 0.5), true);
             ImGui::Text("Mouse movement controls camera");
             ImGui::Text("WASD to move");
+            ImGui::Text("Hold CTRL to sprint");
+            ImGui::Text("SPACE / SHIFT to move up / down");
             ImGui::Text("F to toggle fullscreen");
             ImGui::Text("V to toggle vsync");
             ImGui::Text("X to toggle scene focus");
             ImGui::Text("F1 to take screenshot");
             ImGui::Text("F2 to toggle antialiasing");
+            ImGui::Text("F3 to cycle flight speed: %s", camera.get_flight_speed_tier_label());
+            ImGui::Separator();
+            ImGui::Text("Loaded planets: %d", static_cast<int>(scene.size()));
+            if (scene.empty()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "No planet assets loaded (check resources paths).\n");
+            }
+            ImGui::Text("MMB to reset FOV (current: %.1f)", fov);
+            ImGui::Text("T to teleport to the next planet");
+            ImGui::Text("+ / - orbit speed placeholder: %d", orbit_speed_placeholder);
             ImGui::EndChild();
 
             // camera part of the main window
@@ -376,13 +453,18 @@ App::~App()
 
 void App::destroy(void)
 {
-    // clean up ImGUI
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    if (imgui_initialized) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        imgui_initialized = false;
+    }
 
     // clean up OpenCV
     cv::destroyAllWindows();
+
+    // clean up audio
+    audio_manager.shutdown();
 
     // clean-up GLFW
     if (window) {
@@ -405,6 +487,7 @@ bool App::init(void)
         init_glew();
         init_gl_debug();
         init_framebuffer();
+        audio_manager.init();
 
         //print_opencv_info();
         //print_glfw_info();
@@ -424,9 +507,10 @@ bool App::init(void)
         glfwShowWindow(window);
 
         glEnable(GL_DEPTH_TEST);
-        // assume ALL objects are non-transparent 
-        glCullFace(GL_BACK);
-        glEnable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // Planet rings use alpha and need to be visible from both sides.
+        glDisable(GL_CULL_FACE);
 
     }
     catch (std::exception const& e) {
@@ -438,39 +522,107 @@ bool App::init(void)
 }
 
 void App::init_assets(void) {
-    // all shaders: load, compile, link, initialize params, place to library
-    shader_library.emplace("simple_shader", std::make_shared<ShaderProgram>(std::filesystem::path("resources/shaders/tex.vert"), std::filesystem::path("resources/shaders/tex.frag")));
+    scene.clear();
+    shader_library.clear();
+    texture_library.clear();
 
-    // mesh library: meshes, that can be shared by multiple models
-    //mesh_library.emplace("teapot", std::make_shared<Mesh>(generateCube()));
+    shader_library.emplace(
+        "simple_shader",
+        std::make_shared<ShaderProgram>(
+            std::filesystem::path("resources/shaders/tex.vert"),
+            std::filesystem::path("resources/shaders/tex.frag"))
+    );
 
-    // create default texture
     Texture::init_chkboard();
 
-    // load textures
-    texture_library.emplace("wood_box", std::make_shared<Texture>("resources/textures/box_rgb888.png"));
-    std::unordered_map<std::string, std::filesystem::path> filepaths = {
-        { "teapot", "resources/models/teapot_tri_vnt.obj" },
-        { "sphere", "resources/models/sphere_tri_vnt.obj" }
-    };
-
-    for (const auto& [name, path] : filepaths) {
-        if (!std::filesystem::exists(path)) {
-            throw std::runtime_error("File does not exist: " + path.string());
+    for (const auto& params : planets_params) {
+        get_or_load_texture(params.default_texture_path);
+        for (const auto& [_, texture_path] : params.material_textures) {
+            get_or_load_texture(texture_path);
         }
-
-        std::vector<Vertex> vertices;
-        std::vector<GLuint> indices;
-        if (!loadOBJ(path, vertices, indices)) {
-            throw std::runtime_error("Loading failed: " + path.string());
-        }
-
-        mesh_library.emplace(name, std::make_shared<Mesh>(vertices, indices, GL_TRIANGLES));
     }
 
-    Model m;
-    m.addMesh(mesh_library.at("sphere"), shader_library.at("simple_shader"), texture_library.at("wood_box"));
-    scene.emplace("teapot", m);
+    for (const auto& params : planets_params) {
+        std::vector<OBJMeshPart> mesh_parts;
+        std::vector<std::filesystem::path> referenced_mtl_files;
+        if (!loadOBJWithMaterials(params.model_path, mesh_parts, referenced_mtl_files)) {
+            throw std::runtime_error("Failed to load model: " + params.model_path.string());
+        }
+        (void)referenced_mtl_files;
+
+        glm::vec3 bounds_min(std::numeric_limits<float>::max());
+        glm::vec3 bounds_max(std::numeric_limits<float>::lowest());
+        for (const auto& part : mesh_parts) {
+            for (const auto& vertex : part.vertices) {
+                bounds_min = glm::min(bounds_min, vertex.position);
+                bounds_max = glm::max(bounds_max, vertex.position);
+            }
+        }
+
+        const glm::vec3 model_center = 0.5f * (bounds_min + bounds_max);
+        float max_radius = 0.0f;
+        for (const auto& part : mesh_parts) {
+            for (const auto& vertex : part.vertices) {
+                max_radius = std::max(max_radius, glm::length(vertex.position - model_center));
+            }
+        }
+
+        if (max_radius <= 0.0f) {
+            throw std::runtime_error("Model has invalid radius: " + params.model_path.string());
+        }
+
+        const float scale_to_radius = params.normalized_radius / max_radius;
+
+        Model planet;
+        for (const auto& part : mesh_parts) {
+            std::vector<Vertex> normalized_vertices = part.vertices;
+            for (auto& vertex : normalized_vertices) {
+                vertex.position = (vertex.position - model_center) * scale_to_radius;
+            }
+
+            auto mesh = std::make_shared<Mesh>(normalized_vertices, part.indices, GL_TRIANGLES);
+            auto texture = pick_planet_texture(params, part.material_name);
+            planet.addMesh(mesh, shader_library.at("simple_shader"), texture);
+        }
+
+        planet.setPosition(params.start_position);
+        planet.setEulerAngles(params.start_rotation);
+        planet.setScale(params.start_scale);
+        scene[params.name] = std::move(planet);
+    }
+
+    for (const auto& params : planets_params) {
+        if (!audio_manager.load3D(
+            params.audio_key,
+            params.audio_path,
+            params.audio_min_distance,
+            params.audio_max_distance,
+            params.audio_volume)) {
+            throw std::runtime_error("Failed to load audio: " + params.audio_path.string());
+        }
+    }
+}
+
+std::shared_ptr<Texture> App::get_or_load_texture(const std::filesystem::path& path)
+{
+    const std::string key = path.generic_string();
+    auto it = texture_library.find(key);
+    if (it != texture_library.end()) {
+        return it->second;
+    }
+
+    auto texture = std::make_shared<Texture>(path);
+    texture_library.emplace(key, texture);
+    return texture;
+}
+
+std::shared_ptr<Texture> App::pick_planet_texture(const PlanetParams& params, const std::string& material_name)
+{
+    auto it = params.material_textures.find(material_name);
+    if (it != params.material_textures.end()) {
+        return get_or_load_texture(it->second);
+    }
+    return get_or_load_texture(params.default_texture_path);
 }
 
 void App::init_glfw(void)
@@ -584,6 +736,7 @@ void App::init_imgui()
     ImGui::CreateContext();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init();
+    imgui_initialized = true;
     std::cout << "ImGUI version: " << ImGui::GetVersion() << "\n";
 }
 
@@ -732,6 +885,26 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
             
             break;
 
+        case GLFW_KEY_F3:
+            this_inst->camera.cycle_flight_speed_tier();
+            break;
+
+        case GLFW_KEY_KP_ADD:
+        case GLFW_KEY_EQUAL:
+            // Placeholder for future orbit-speed based movement.
+            this_inst->orbit_speed_placeholder = std::clamp(this_inst->orbit_speed_placeholder + 1, -10, 10);
+            break;
+
+        case GLFW_KEY_KP_SUBTRACT:
+        case GLFW_KEY_MINUS:
+            // Placeholder for future orbit-speed based movement.
+            this_inst->orbit_speed_placeholder = std::clamp(this_inst->orbit_speed_placeholder - 1, -10, 10);
+            break;
+
+        case GLFW_KEY_T:
+            this_inst->teleport_to_next_planet();
+            break;
+
         case GLFW_KEY_X:
             // focus toggle
             // 3 things:
@@ -793,7 +966,7 @@ void App::update_projection_matrix(void)
     float ratio = static_cast<float>(width) / height;
 
     projection_matrix = glm::perspective(
-        glm::radians(fov),   // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90° (extra wide) and 30° (quite zoomed in)
+        glm::radians(fov),   // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90ï¿½ (extra wide) and 30ï¿½ (quite zoomed in)
         ratio,               // Aspect Ratio. Depends on the size of your window.
         0.1f,                // Near clipping plane. Keep as big as possible, or you'll get precision issues.
         20000.0f             // Far clipping plane. Keep as little as possible.
@@ -801,6 +974,8 @@ void App::update_projection_matrix(void)
 }
 
 void App::glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    auto this_inst = static_cast<App*>(glfwGetWindowUserPointer(window));
+
     if (action == GLFW_PRESS) {
         switch (button) {
         //case GLFW_MOUSE_BUTTON_LEFT: {
@@ -819,9 +994,197 @@ void App::glfw_mouse_button_callback(GLFWwindow* window, int button, int action,
             // release the cursor
             //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             break;
+
+        case GLFW_MOUSE_BUTTON_MIDDLE:
+            this_inst->fov = this_inst->default_fov;
+            this_inst->update_projection_matrix();
+            break;
         default:
             break;
         }
+    }
+}
+
+const std::vector<App::PlanetParams>& App::get_planet_params(void) const
+{
+    return planets_params;
+}
+
+App::PlanetParams* App::find_planet_params(const std::string& name)
+{
+    for (auto& params : planets_params) {
+        if (params.name == name) {
+            return &params;
+        }
+    }
+    return nullptr;
+}
+
+const App::PlanetParams* App::find_planet_params(const std::string& name) const
+{
+    for (const auto& params : planets_params) {
+        if (params.name == name) {
+            return &params;
+        }
+    }
+    return nullptr;
+}
+
+void App::set_planet_transform(const std::string& name, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& scale)
+{
+    PlanetParams* params = find_planet_params(name);
+    if (!params) {
+        return;
+    }
+
+    params->start_position = position;
+    params->start_rotation = rotation;
+    params->start_scale = scale;
+
+    auto it = scene.find(name);
+    if (it != scene.end()) {
+        it->second.setPosition(position);
+        it->second.setEulerAngles(rotation);
+        it->second.setScale(scale);
+    }
+}
+
+void App::set_planet_orbit_speed(const std::string& name, float orbit_speed_deg)
+{
+    PlanetParams* params = find_planet_params(name);
+    if (!params) {
+        return;
+    }
+    params->orbit_speed_deg = orbit_speed_deg;
+}
+
+glm::vec3 App::get_planet_position(const std::string& name) const
+{
+    auto it = scene.find(name);
+    if (it != scene.end()) {
+        return it->second.getPosition();
+    }
+    return glm::vec3(0.0f, 0.0f, 0.0f);
+}
+
+void App::update_planets(float delta_t)
+{
+    const float orbit_speed_scale = std::max(0.0f, 1.0f + static_cast<float>(orbit_speed_placeholder) * 0.1f);
+
+    for (auto& params : planets_params) {
+        auto it = scene.find(params.name);
+        if (it == scene.end()) {
+            continue;
+        }
+
+        if (params.orbit_radius > 0.0f) {
+            params.orbit_angle_deg = std::fmod(params.orbit_angle_deg + params.orbit_speed_deg * orbit_speed_scale * delta_t, 360.0f);
+            const float angle_rad = glm::radians(params.orbit_angle_deg);
+            params.start_position = params.orbit_center + glm::vec3(
+                std::cos(angle_rad) * params.orbit_radius,
+                params.start_position.y,
+                std::sin(angle_rad) * params.orbit_radius
+            );
+        }
+
+        if (params.self_rotation_speed_deg != 0.0f) {
+            params.start_rotation.y = std::fmod(params.start_rotation.y + params.self_rotation_speed_deg * delta_t, 360.0f);
+        }
+
+        it->second.setPosition(params.start_position);
+        it->second.setEulerAngles(params.start_rotation);
+        it->second.setScale(params.start_scale);
+    }
+}
+
+void App::update_spatial_audio()
+{
+    audio_manager.set_listener_position(
+        camera.position.x,
+        camera.position.y,
+        camera.position.z,
+        camera.front.x,
+        camera.front.y,
+        camera.front.z
+    );
+
+    for (const auto& params : planets_params) {
+        auto it = scene.find(params.name);
+        if (it == scene.end()) {
+            audio_manager.stop3DLoop(params.name);
+            continue;
+        }
+
+        const glm::vec3& pos = it->second.getPosition();
+        audio_manager.ensure3DLoop(params.name, params.audio_key, pos.x, pos.y, pos.z);
+    }
+
+    audio_manager.clean_finished_sounds();
+}
+
+void App::resolve_player_planet_collisions()
+{
+    constexpr float min_distance_epsilon = 0.001f;
+
+    for (const auto& params : planets_params) {
+        auto it = scene.find(params.name);
+        if (it == scene.end()) {
+            continue;
+        }
+
+        const glm::vec3& center = it->second.getPosition();
+        glm::vec3 offset = camera.position - center;
+        float distance = glm::length(offset);
+        float min_allowed_distance = params.collision_radius + player_collision_padding;
+
+        if (distance >= min_allowed_distance) {
+            continue;
+        }
+
+        if (distance < min_distance_epsilon) {
+            offset = glm::vec3(0.0f, 1.0f, 0.0f);
+            distance = 1.0f;
+        }
+
+        camera.position = center + (offset / distance) * min_allowed_distance;
+    }
+}
+
+void App::teleport_to_next_planet()
+{
+    if (scene.empty() || planets_params.empty()) {
+        return;
+    }
+
+    for (std::size_t attempt = 0; attempt < planets_params.size(); ++attempt) {
+        const PlanetParams& params = planets_params[next_teleport_index % planets_params.size()];
+        next_teleport_index = (next_teleport_index + 1) % planets_params.size();
+
+        auto it = scene.find(params.name);
+        if (it == scene.end()) {
+            continue;
+        }
+
+        const glm::vec3& center = it->second.getPosition();
+        const float stand_off_distance = params.collision_radius + player_collision_padding + params.teleport_distance;
+        camera.position = center + glm::vec3(0.0f, 0.0f, stand_off_distance);
+
+        const glm::vec3 world_up(0.0f, 1.0f, 0.0f);
+        glm::vec3 view_dir = glm::normalize(center - camera.position);
+        camera.front = view_dir;
+
+        glm::vec3 computed_right = glm::cross(camera.front, world_up);
+        if (glm::length(computed_right) < 0.0001f) {
+            computed_right = glm::vec3(1.0f, 0.0f, 0.0f);
+        }
+        camera.right = glm::normalize(computed_right);
+        camera.up = glm::normalize(glm::cross(camera.right, camera.front));
+
+        camera.yaw = glm::degrees(std::atan2(view_dir.z, view_dir.x));
+        camera.pitch = glm::degrees(std::asin(std::clamp(view_dir.y, -1.0f, 1.0f)));
+
+        resolve_player_planet_collisions();
+        return;
     }
 }
 

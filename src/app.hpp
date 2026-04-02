@@ -4,6 +4,9 @@
 #pragma once
 #include <vector>
 #include <atomic>
+#include <filesystem>
+#include <string>
+#include <unordered_map>
 
 #include <opencv2/opencv.hpp>
 
@@ -16,19 +19,49 @@
 #include "shaders/Model.hpp"
 #include "camera.hpp"
 #include "shaders/Texture.hpp"
+#include "audio_manager.hpp"
 
 class App {
 public:
+    struct PlanetParams {
+        std::string name;
+        std::filesystem::path model_path;
+        std::filesystem::path default_texture_path;
+        std::unordered_map<std::string, std::filesystem::path> material_textures;
+        std::filesystem::path audio_path;
+        std::string audio_key;
+        glm::vec3 start_position{ 0.0f, 0.0f, 0.0f };
+        glm::vec3 start_rotation{ 90.0f, 0.0f, 0.0f };
+        glm::vec3 start_scale{ 1.0f, 1.0f, 1.0f };
+        float normalized_radius = 1.2f;
+        float collision_radius = 1.2f;
+        float teleport_distance = 12.0f;
+        glm::vec3 orbit_center{ 0.0f, 0.0f, 0.0f };
+        float orbit_radius = 0.0f;
+        float orbit_speed_deg = 0.0f;
+        float orbit_angle_deg = 0.0f;
+        float self_rotation_speed_deg = 0.0f;
+        float audio_min_distance = 5.0f;
+        float audio_max_distance = 1000.0f;
+        float audio_volume = 1.0f;
+    };
+
     App();
 
     bool init(void);
     int run(void);
     void add_console_log(const char* msg);
 
+    void set_planet_transform(const std::string& name, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& scale);
+    void set_planet_orbit_speed(const std::string& name, float orbit_speed_deg);
+    glm::vec3 get_planet_position(const std::string& name) const;
+    const std::vector<PlanetParams>& get_planet_params(void) const;
+
     ~App();
 protected:
     // projection related variables    
     int width{ 0 }, height{ 0 };
+    const float default_fov = 60.0f;
     float fov = 60.0f;
     // store projection matrix here, update only on callbacks
     glm::mat4 projection_matrix = glm::identity<glm::mat4>();
@@ -89,6 +122,11 @@ private:
 
     // focus toggle
     bool scene_in_focus = false;
+    bool imgui_initialized = false;
+
+    // placeholder controls for future orbital logic
+    int orbit_speed_placeholder = 0;
+    std::size_t next_teleport_index = 0;
 
     // init stuff
     void init_opencv();
@@ -129,6 +167,20 @@ private:
     static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
     static void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
+
+    std::vector<PlanetParams> planets_params;
+
+    AudioManager audio_manager;
+    void update_spatial_audio();
+    float player_collision_padding = 0.8f;
+    void resolve_player_planet_collisions();
+    void teleport_to_next_planet();
+    void update_planets(float delta_t);
+
+    PlanetParams* find_planet_params(const std::string& name);
+    const PlanetParams* find_planet_params(const std::string& name) const;
+    std::shared_ptr<Texture> get_or_load_texture(const std::filesystem::path& path);
+    std::shared_ptr<Texture> pick_planet_texture(const PlanetParams& params, const std::string& material_name);
 
     // 3D scene stuff
     // shared library of shaders for all models, automatic resource management 

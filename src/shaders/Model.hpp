@@ -76,6 +76,10 @@ public:
         local_model_matrix = createMM(pivot_position, eulerAngles, scale);
     }
 
+    const glm::vec3& getPosition() const {
+        return pivot_position;
+    }
+
     void setEulerAngles(const glm::vec3& new_eulerAngles) {
         eulerAngles = new_eulerAngles;
         local_model_matrix = createMM(pivot_position, eulerAngles, scale);
