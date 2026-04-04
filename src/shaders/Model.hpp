@@ -32,7 +32,7 @@ private:
         glm::mat4 t = glm::translate(glm::mat4(1.0f), origin);
         glm::mat4 rotm = glm::yawPitchRoll(glm::radians(eA.y), glm::radians(eA.x), glm::radians(eA.z)); //yaw, pitch, roll
         glm::mat4 s = glm::scale(glm::mat4(1.0f), scale);
-        return s * rotm * t;
+        return t * rotm * s;
     }
 
     float wrap_angle(float angle) { // wrap any float to [0, 360)
