@@ -84,15 +84,15 @@ std::vector<App::PlanetParams> create_default_planets_params()
     };
 
     std::vector<App::PlanetParams> planets = {
-        make_planet("sun", "resources/models/planets/sun.obj", "resources/textures/sun.jpeg", "resources/audio/planets/sun.mp3", "snd_planet_sun", 5.0f, 1200.0f, 0.0f * planet_spacing, 0.0f, 0.0f),
-        make_planet("mercury", "resources/models/planets/mercury.obj", "resources/textures/mercury.jpg", "resources/audio/planets/mercury.mp3", "snd_planet_mercury", 5.0f, 700.0f, 1.0f * planet_spacing, 90.0f, 47.3f),
-        make_planet("venus", "resources/models/planets/venus.obj", "resources/textures/venus_1.png", "resources/audio/planets/venus.mp3", "snd_planet_venus", 5.0f, 700.0f, 2.0f * planet_spacing, 0.0f, 35.0f),
-        make_planet("earth", "resources/models/planets/earth.obj", "resources/textures/earth.jpg", "resources/audio/planets/earth.mp3", "snd_planet_earth", 5.0f, 700.0f, 3.0f * planet_spacing, 90.0f, 29.7f),
-        make_planet("mars", "resources/models/planets/mars.obj", "resources/textures/mars.jpg", "resources/audio/planets/mars.mp3", "snd_planet_mars", 5.0f, 700.0f, 4.0f * planet_spacing, 90.0f, 24.1f),
-        make_planet("jupiter", "resources/models/planets/jupiter.obj", "resources/textures/jupiter.jpeg", "resources/audio/planets/jupiter.mp3", "snd_planet_jupiter", 8.0f, 900.0f, 5.0f * planet_spacing, 0.0f, 13.0f),
-        make_planet("saturn", "resources/models/planets/saturn.obj", "resources/textures/saturn.png", "resources/audio/planets/saturn.mp3", "snd_planet_saturn", 8.0f, 900.0f, 6.0f * planet_spacing, 0.0f, 9.6f),
-        make_planet("uranus", "resources/models/planets/uranus.obj", "resources/textures/uranus.jpeg", "resources/audio/planets/uranus.mp3", "snd_planet_uranus", 8.0f, 900.0f, 7.0f * planet_spacing, 0.0f, 6.8f),
-        make_planet("neptune", "resources/models/planets/neptune.obj", "resources/textures/neptune_base.jpg", "resources/audio/planets/neptune.mp3", "snd_planet_neptune", 8.0f, 900.0f, 8.0f * planet_spacing, 90.0f, 5.4f)
+        make_planet("sun", "resources/models/planets/sun.obj", "resources/textures/sun.jpeg", "resources/audio/planets/sun.mp3", "snd_planet_sun", 5.0f, 150.0f, 0.0f * planet_spacing, 0.0f, 0.0f),
+        make_planet("mercury", "resources/models/planets/mercury.obj", "resources/textures/mercury.jpg", "resources/audio/planets/mercury.mp3", "snd_planet_mercury", 5.0f, 150.0f, 1.0f * planet_spacing, 90.0f, 47.3f),
+        make_planet("venus", "resources/models/planets/venus.obj", "resources/textures/venus_1.png", "resources/audio/planets/venus.mp3", "snd_planet_venus", 5.0f, 150.0f, 2.0f * planet_spacing, 0.0f, 35.0f),
+        make_planet("earth", "resources/models/planets/earth.obj", "resources/textures/earth.jpg", "resources/audio/planets/earth.mp3", "snd_planet_earth", 5.0f, 150.0f, 3.0f * planet_spacing, 90.0f, 29.7f),
+        make_planet("mars", "resources/models/planets/mars.obj", "resources/textures/mars.jpg", "resources/audio/planets/mars.mp3", "snd_planet_mars", 5.0f, 150.0f, 4.0f * planet_spacing, 90.0f, 24.1f),
+        make_planet("jupiter", "resources/models/planets/jupiter.obj", "resources/textures/jupiter.jpeg", "resources/audio/planets/jupiter.mp3", "snd_planet_jupiter", 5.0f, 150.0f, 5.0f * planet_spacing, 0.0f, 13.0f),
+        make_planet("saturn", "resources/models/planets/saturn.obj", "resources/textures/saturn.png", "resources/audio/planets/saturn.mp3", "snd_planet_saturn", 5.0f, 150.0f, 6.0f * planet_spacing, 0.0f, 9.6f),
+        make_planet("uranus", "resources/models/planets/uranus.obj", "resources/textures/uranus.jpeg", "resources/audio/planets/uranus.mp3", "snd_planet_uranus", 5.0f, 150.0f, 7.0f * planet_spacing, 0.0f, 6.8f),
+        make_planet("neptune", "resources/models/planets/neptune.obj", "resources/textures/neptune_base.jpg", "resources/audio/planets/neptune.mp3", "snd_planet_neptune", 5.0f, 150.0f, 8.0f * planet_spacing, 90.0f, 5.4f)
     };
 
     planets[6].material_textures = {
