@@ -285,7 +285,7 @@ int App::run(void)
 
             for (int i = 0; i < console_lines.size(); i++)
             {
-                ImGui::TextUnformatted(console_lines[i]);
+                ImGui::TextUnformatted(console_lines[i].c_str());
             }
             
 

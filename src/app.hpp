@@ -111,7 +111,7 @@ private:
     double cursor_last_y{ 0 };
     
     // in-window console stuff
-    std::vector<char*> console_lines;
+    std::vector<std::string> console_lines;
     bool scroll_to_bottom = false;
     static std::string SanitizeUTF8(const char* msg);
 
