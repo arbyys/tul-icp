@@ -31,7 +31,7 @@ public:
         std::filesystem::path audio_path;
         std::string audio_key;
         glm::vec3 start_position{ 0.0f, 0.0f, 0.0f };
-        glm::vec3 start_rotation{ 90.0f, 0.0f, 0.0f };
+        glm::vec3 start_rotation{ 0.0f, 0.0f, 0.0f };
         glm::vec3 start_scale{ 1.0f, 1.0f, 1.0f };
         float normalized_radius = 1.2f;
         float collision_radius = 1.2f;

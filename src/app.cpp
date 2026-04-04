@@ -48,6 +48,8 @@
 namespace {
 std::vector<App::PlanetParams> create_default_planets_params()
 {
+    constexpr float planet_height = 3.0f;
+
     auto make_planet = [](
         const std::string& name,
         const std::filesystem::path& model_path,
@@ -56,7 +58,8 @@ std::vector<App::PlanetParams> create_default_planets_params()
         const std::string& audio_key,
         float audio_min_distance,
         float audio_max_distance,
-        float x_position) {
+        float x_position,
+        float rotation_x_deg) {
             App::PlanetParams params;
             params.name = name;
             params.model_path = model_path;
@@ -65,22 +68,22 @@ std::vector<App::PlanetParams> create_default_planets_params()
             params.audio_key = audio_key;
             params.audio_min_distance = audio_min_distance;
             params.audio_max_distance = audio_max_distance;
-            params.start_position = glm::vec3(x_position, 0.0f, 0.0f);
-            params.start_rotation = glm::vec3(90.0f, 0.0f, 0.0f);
+            params.start_position = glm::vec3(x_position, planet_height, 0.0f);
+            params.start_rotation = glm::vec3(rotation_x_deg, 0.0f, 0.0f);
             params.start_scale = glm::vec3(1.0f, 1.0f, 1.0f);
             return params;
     };
 
     std::vector<App::PlanetParams> planets = {
-        make_planet("sun", "resources/models/planets/sun.obj", "resources/textures/sun.jpeg", "resources/audio/planets/sun.mp3", "snd_planet_sun", 5.0f, 2000.0f, 0.0f),
-        make_planet("mercury", "resources/models/planets/mercury.obj", "resources/textures/mercury.jpg", "resources/audio/planets/mercury.mp3", "snd_planet_mercury", 5.0f, 1000.0f, 8.0f),
-        make_planet("venus", "resources/models/planets/venus.obj", "resources/textures/venus_1.png", "resources/audio/planets/venus.mp3", "snd_planet_venus", 5.0f, 1000.0f, 16.0f),
-        make_planet("earth", "resources/models/planets/earth.obj", "resources/textures/earth.jpg", "resources/audio/planets/earth.mp3", "snd_planet_earth", 5.0f, 1000.0f, 24.0f),
-        make_planet("mars", "resources/models/planets/mars.obj", "resources/textures/mars.jpg", "resources/audio/planets/mars.mp3", "snd_planet_mars", 5.0f, 1000.0f, 32.0f),
-        make_planet("jupiter", "resources/models/planets/jupiter.obj", "resources/textures/jupiter.jpeg", "resources/audio/planets/jupiter.mp3", "snd_planet_jupiter", 8.0f, 1600.0f, 40.0f),
-        make_planet("saturn", "resources/models/planets/saturn.obj", "resources/textures/saturn.png", "resources/audio/planets/saturn.mp3", "snd_planet_saturn", 8.0f, 1600.0f, 48.0f),
-        make_planet("uranus", "resources/models/planets/uranus.obj", "resources/textures/uranus.jpeg", "resources/audio/planets/uranus.mp3", "snd_planet_uranus", 8.0f, 1600.0f, 56.0f),
-        make_planet("neptune", "resources/models/planets/neptune.obj", "resources/textures/neptune_base.jpg", "resources/audio/planets/neptune.mp3", "snd_planet_neptune", 8.0f, 1600.0f, 64.0f)
+        make_planet("sun", "resources/models/planets/sun.obj", "resources/textures/sun.jpeg", "resources/audio/planets/sun.mp3", "snd_planet_sun", 5.0f, 1200.0f, 0.0f, 0.0f),
+        make_planet("mercury", "resources/models/planets/mercury.obj", "resources/textures/mercury.jpg", "resources/audio/planets/mercury.mp3", "snd_planet_mercury", 5.0f, 700.0f, 10.0f, 0.0f),
+        make_planet("venus", "resources/models/planets/venus.obj", "resources/textures/venus_1.png", "resources/audio/planets/venus.mp3", "snd_planet_venus", 5.0f, 700.0f, 20.0f, 0.0f),
+        make_planet("earth", "resources/models/planets/earth.obj", "resources/textures/earth.jpg", "resources/audio/planets/earth.mp3", "snd_planet_earth", 5.0f, 700.0f, 30.0f, 90.0f),
+        make_planet("mars", "resources/models/planets/mars.obj", "resources/textures/mars.jpg", "resources/audio/planets/mars.mp3", "snd_planet_mars", 5.0f, 700.0f, 40.0f, 0.0f),
+        make_planet("jupiter", "resources/models/planets/jupiter.obj", "resources/textures/jupiter.jpeg", "resources/audio/planets/jupiter.mp3", "snd_planet_jupiter", 8.0f, 900.0f, 50.0f, 0.0f),
+        make_planet("saturn", "resources/models/planets/saturn.obj", "resources/textures/saturn.png", "resources/audio/planets/saturn.mp3", "snd_planet_saturn", 8.0f, 900.0f, 60.0f, 0.0f),
+        make_planet("uranus", "resources/models/planets/uranus.obj", "resources/textures/uranus.jpeg", "resources/audio/planets/uranus.mp3", "snd_planet_uranus", 8.0f, 900.0f, 70.0f, 0.0f),
+        make_planet("neptune", "resources/models/planets/neptune.obj", "resources/textures/neptune_base.jpg", "resources/audio/planets/neptune.mp3", "snd_planet_neptune", 8.0f, 900.0f, 80.0f, 0.0f)
     };
 
     planets[6].material_textures = {
@@ -342,7 +345,7 @@ int App::run(void)
             }
             ImGui::Text("MMB to reset FOV (current: %.1f)", fov);
             ImGui::Text("T to teleport to the next planet");
-            ImGui::Text("+ / - orbit speed placeholder: %d", orbit_speed_placeholder);
+            ImGui::Text("UP / DOWN orbit speed placeholder: %d", orbit_speed_placeholder);
             ImGui::EndChild();
 
             // camera part of the main window
@@ -889,14 +892,12 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
             this_inst->camera.cycle_flight_speed_tier();
             break;
 
-        case GLFW_KEY_KP_ADD:
-        case GLFW_KEY_EQUAL:
+        case GLFW_KEY_UP:
             // Placeholder for future orbit-speed based movement.
             this_inst->orbit_speed_placeholder = std::clamp(this_inst->orbit_speed_placeholder + 1, -10, 10);
             break;
 
-        case GLFW_KEY_KP_SUBTRACT:
-        case GLFW_KEY_MINUS:
+        case GLFW_KEY_DOWN:
             // Placeholder for future orbit-speed based movement.
             this_inst->orbit_speed_placeholder = std::clamp(this_inst->orbit_speed_placeholder - 1, -10, 10);
             break;
