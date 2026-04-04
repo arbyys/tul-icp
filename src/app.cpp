@@ -1089,12 +1089,13 @@ void App::update_planets(float delta_t)
         }
 
         if (params.orbit_radius > 0.0f) {
-            params.orbit_angle_deg = std::fmod(params.orbit_angle_deg + params.orbit_speed_deg * orbit_speed_scale * delta_t, 360.0f);
+            params.orbit_angle_deg = std::fmod(params.orbit_angle_deg + params.orbit_speed_deg * orbit_speed_scale * 0.1f * delta_t, 360.0f);
             const float angle_rad = glm::radians(params.orbit_angle_deg);
-            params.start_position = params.orbit_center + glm::vec3(
-                std::cos(angle_rad) * params.orbit_radius,
-                params.start_position.y,
-                std::sin(angle_rad) * params.orbit_radius
+            
+            params.start_position = glm::vec3(
+                params.orbit_center.x + std::cos(angle_rad) * params.orbit_radius,
+                params.orbit_center.y,
+                params.orbit_center.z + std::sin(angle_rad) * params.orbit_radius
             );
         }
 
