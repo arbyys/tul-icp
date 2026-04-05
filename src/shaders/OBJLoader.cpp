@@ -1,196 +1,257 @@
-#include <string>
 #include <algorithm>
-#include <GL/glew.h> 
-#include <glm/glm.hpp>
-#include <iostream>
 #include <fstream>
-#include <istream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-#include "OBJloader.hpp"
+#include <GL/glew.h>
+#include <glm/glm.hpp>
 
-#define MAX_LINE_SIZE 1024
+#include "OBJLoader.hpp"
 
-bool read_all_lines(const std::filesystem::path& filename, std::vector<std::string>& buffer)
-{
-	// clear buffer before reading file content into it
-	buffer.clear();
-	std::string line;
-	std::ifstream file_reader(filename);
-	while (getline(file_reader, line)) {
-		buffer.push_back(line);
+namespace {
+struct FaceToken {
+	int vertex_index = 0;
+	int uv_index = 0;
+	int normal_index = 0;
+};
+
+int resolve_obj_index(int raw_index, int size) {
+	if (raw_index > 0) {
+		return raw_index - 1;
 	}
-	file_reader.close();
+	if (raw_index < 0) {
+		return size + raw_index;
+	}
+	return -1;
+}
 
+bool parse_face_token(const std::string& token, FaceToken& out) {
+	if (token.empty()) {
+		return false;
+	}
+
+	out = FaceToken{};
+	std::size_t first_slash = token.find('/');
+	if (first_slash == std::string::npos) {
+		out.vertex_index = std::stoi(token);
+		return true;
+	}
+
+	std::size_t second_slash = token.find('/', first_slash + 1);
+	const std::string v = token.substr(0, first_slash);
+	if (!v.empty()) {
+		out.vertex_index = std::stoi(v);
+	}
+
+	if (second_slash == std::string::npos) {
+		const std::string vt = token.substr(first_slash + 1);
+		if (!vt.empty()) {
+			out.uv_index = std::stoi(vt);
+		}
+		return true;
+	}
+
+	const std::string vt = token.substr(first_slash + 1, second_slash - first_slash - 1);
+	const std::string vn = token.substr(second_slash + 1);
+	if (!vt.empty()) {
+		out.uv_index = std::stoi(vt);
+	}
+	if (!vn.empty()) {
+		out.normal_index = std::stoi(vn);
+	}
+
+	return true;
+}
+
+Vertex make_vertex(
+	const FaceToken& token,
+	const std::vector<glm::vec3>& positions,
+	const std::vector<glm::vec2>& uvs,
+	const std::vector<glm::vec3>& normals)
+{
+	Vertex vertex{};
+
+	const int p = resolve_obj_index(token.vertex_index, static_cast<int>(positions.size()));
+	const int t = resolve_obj_index(token.uv_index, static_cast<int>(uvs.size()));
+	const int n = resolve_obj_index(token.normal_index, static_cast<int>(normals.size()));
+
+	if (p >= 0 && p < static_cast<int>(positions.size())) {
+		vertex.position = positions[static_cast<std::size_t>(p)];
+	}
+	if (t >= 0 && t < static_cast<int>(uvs.size())) {
+		vertex.tex_coords = uvs[static_cast<std::size_t>(t)];
+	}
+	if (n >= 0 && n < static_cast<int>(normals.size())) {
+		vertex.normal = normals[static_cast<std::size_t>(n)];
+	}
+
+	return vertex;
+}
+
+std::string trim(const std::string& value) {
+	const std::size_t first = value.find_first_not_of(" \t\r\n");
+	if (first == std::string::npos) {
+		return {};
+	}
+	const std::size_t last = value.find_last_not_of(" \t\r\n");
+	return value.substr(first, last - first + 1);
+}
+}
+
+bool loadOBJWithMaterials(
+	const std::filesystem::path& filename,
+	std::vector<OBJMeshPart>& mesh_parts,
+	std::vector<std::filesystem::path>& referenced_mtl_files)
+{
+	mesh_parts.clear();
+	referenced_mtl_files.clear();
+
+	std::ifstream file_reader(filename);
+	if (!file_reader.is_open()) {
+		std::cerr << "[OBJ] Failed to open: " << filename.string() << "\n";
+		return false;
+	}
+
+	std::cout << "Loading model: " << filename.string() << std::endl;
+
+	std::vector<glm::vec3> positions;
+	std::vector<glm::vec2> uvs;
+	std::vector<glm::vec3> normals;
+	std::unordered_map<std::string, std::size_t> part_index_by_material;
+
+	auto get_part_for_material = [&](const std::string& material_name) -> OBJMeshPart& {
+		auto it = part_index_by_material.find(material_name);
+		if (it != part_index_by_material.end()) {
+			return mesh_parts[it->second];
+		}
+
+		mesh_parts.push_back(OBJMeshPart{});
+		OBJMeshPart& new_part = mesh_parts.back();
+		new_part.material_name = material_name;
+		part_index_by_material.emplace(material_name, mesh_parts.size() - 1);
+		return new_part;
+	};
+
+	std::string current_material = "default";
+	std::string line;
+	while (std::getline(file_reader, line)) {
+		line = trim(line);
+		if (line.empty() || line[0] == '#') {
+			continue;
+		}
+
+		if (line.rfind("v ", 0) == 0) {
+			std::istringstream iss(line);
+			std::string tag;
+			glm::vec3 position{};
+			iss >> tag >> position.x >> position.y >> position.z;
+			positions.push_back(position);
+			continue;
+		}
+
+		if (line.rfind("vt ", 0) == 0) {
+			std::istringstream iss(line);
+			std::string tag;
+			glm::vec2 uv{};
+			iss >> tag >> uv.y >> uv.x;
+			uvs.push_back(uv);
+			continue;
+		}
+
+		if (line.rfind("vn ", 0) == 0) {
+			std::istringstream iss(line);
+			std::string tag;
+			glm::vec3 normal{};
+			iss >> tag >> normal.x >> normal.y >> normal.z;
+			normals.push_back(normal);
+			continue;
+		}
+
+		if (line.rfind("mtllib ", 0) == 0) {
+			std::string mtl_file = trim(line.substr(7));
+			if (!mtl_file.empty()) {
+				referenced_mtl_files.push_back(mtl_file);
+			}
+			continue;
+		}
+
+		if (line.rfind("usemtl ", 0) == 0) {
+			const std::string parsed = trim(line.substr(7));
+			current_material = parsed.empty() ? "default" : parsed;
+			continue;
+		}
+
+		if (line.rfind("f ", 0) != 0) {
+			continue;
+		}
+
+		std::istringstream iss(line.substr(2));
+		std::vector<FaceToken> polygon_tokens;
+		std::string token;
+		while (iss >> token) {
+			FaceToken face_token{};
+			if (parse_face_token(token, face_token) && face_token.vertex_index != 0) {
+				polygon_tokens.push_back(face_token);
+			}
+		}
+
+		if (polygon_tokens.size() < 3) {
+			continue;
+		}
+
+		OBJMeshPart& part = get_part_for_material(current_material);
+
+		for (std::size_t i = 1; i + 1 < polygon_tokens.size(); ++i) {
+			const Vertex a = make_vertex(polygon_tokens[0], positions, uvs, normals);
+			const Vertex b = make_vertex(polygon_tokens[i], positions, uvs, normals);
+			const Vertex c = make_vertex(polygon_tokens[i + 1], positions, uvs, normals);
+
+			const GLuint base = static_cast<GLuint>(part.vertices.size());
+			part.vertices.push_back(a);
+			part.vertices.push_back(b);
+			part.vertices.push_back(c);
+			part.indices.push_back(base);
+			part.indices.push_back(base + 1);
+			part.indices.push_back(base + 2);
+		}
+	}
+
+	mesh_parts.erase(
+		std::remove_if(mesh_parts.begin(), mesh_parts.end(), [](const OBJMeshPart& part) {
+			return part.vertices.empty() || part.indices.empty();
+		}),
+		mesh_parts.end());
+
+	if (mesh_parts.empty()) {
+		std::cerr << "[OBJ] No drawable geometry in: " << filename.string() << "\n";
+		return false;
+	}
+
+	std::cout << "Model loaded: " << filename.string() << " (parts: " << mesh_parts.size() << ")" << std::endl;
 	return true;
 }
 
 bool loadOBJ(const std::filesystem::path& filename, std::vector<Vertex>& vertices, std::vector<GLuint>& indices)
 {
-	std::cout << "Loading model: " << filename.string() << std::endl;
-
-	std::vector<unsigned int> vertex_indices, uv_indices, normal_indices;
-
-	// temporary buffers
-	std::vector<glm::vec3> temp_vertices;
-	std::vector<glm::vec2> temp_uvs;
-	std::vector<glm::vec3> temp_normals;
-
-	// clear vertices and indices buffers before writing to them
 	vertices.clear();
 	indices.clear();
 
-	// read file data into buffer
-	std::vector<std::string> file_contents;
-	read_all_lines(filename, file_contents);
+	std::vector<OBJMeshPart> mesh_parts;
+	std::vector<std::filesystem::path> referenced_mtl_files;
+	if (!loadOBJWithMaterials(filename, mesh_parts, referenced_mtl_files)) {
+		return false;
+	}
 
-	for (const std::string& line : file_contents)
-	{
-		// skip empty lines
-		if (line.empty())
-		{
-			continue;
-		}
-
-		// start of the line identifying the record type
-		std::string recordId = line.substr(0, 2);
-		// v - vertex record
-		if (recordId == "v ") {
-			glm::vec3 vertex{};
-			sscanf_s(line.c_str(), "v %f %f %f\n", &vertex.x, &vertex.y, &vertex.z);
-			temp_vertices.push_back(vertex);
-		}
-		// vt - vertex texture (uv) coordinate record
-		else if (recordId == "vt") {
-			glm::vec2 uv{};
-			sscanf_s(line.c_str(), "vt %f %f\n", &uv.y, &uv.x);
-			temp_uvs.push_back(uv);
-		}
-		// vn - vertex normal vector record
-		else if (recordId == "vn") {
-			glm::vec3 normal{};
-			sscanf_s(line.c_str(), "vn %f %f %f\n", &normal.x, &normal.y, &normal.z);
-			temp_normals.push_back(normal);
-		}
-		// f - the way [v, [vt, vn]] are connected into triangles
-		else if (recordId == "f ") {
-			// split into cases - dependent on format of the lines
-			auto containsDoubleSlash = line.find("//") != std::string::npos;
-			auto slashCount = std::count(line.begin(), line.end(), '/');
-			//auto doubleSlashCount = std::count(line.begin(), line.end(), '//');
-			// order of indexing - vertexes, uvs, normals
-			// [v v v v uv uv uv uv un un un un]
-			unsigned int indices[12]{};
-
-			// case 1
-			// vertex and normal vector
-			// f %d//%d %d//%d %d//%d
-			// f  1//2   4//3   3//5
-			if (slashCount == 6 && containsDoubleSlash)
-			{
-				(void)sscanf_s(line.c_str(), "f %d//%d %d//%d %d//%d\n", &indices[0], &indices[4], &indices[1], &indices[5], &indices[2], &indices[6]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2] });
-				normal_indices.insert(normal_indices.end(), { indices[4], indices[5], indices[6] });
-			}
-
-			// case 2
-			// vertex only
-			// f %d %d %d
-			// f  1  2  3
-			else if (slashCount == 0)
-			{
-				(void)sscanf_s(line.c_str(), "f %d %d %d\n", &indices[0], &indices[1], &indices[2]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2] });
-			}
-
-			// case 3
-			// vertex and texture coord
-			// f %d/%d %d/%d %d/%d
-			// f  1/2   3/4   4/2
-			else if (slashCount == 3)
-			{
-				sscanf_s(line.c_str(), "f %d/%d %d/%d %d/%d\n", &indices[0], &indices[8], &indices[1], &indices[9], &indices[2], &indices[10]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2] });
-				uv_indices.insert(uv_indices.end(), { indices[8], indices[9], indices[10] });
-			}
-
-			// case 4
-			// vertex, texture coord and normal
-			// f %d/%d/%d %d/%d/%d %d/%d/%d
-			// f  1/1/1    1/1/1    1/1/1
-			else if (slashCount == 6)
-			{
-				sscanf_s(line.c_str(), "f %d/%d/%d %d/%d/%d %d/%d/%d\n", &indices[0], &indices[4], &indices[8], &indices[1], &indices[5], &indices[9], &indices[2], &indices[6], &indices[10]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2] });
-				uv_indices.insert(uv_indices.end(), { indices[4], indices[5], indices[6] });
-				normal_indices.insert(normal_indices.end(), { indices[8], indices[9], indices[10] });
-			}
-
-			// case 5
-			// vertex and normal vector, square
-			// f %d//%d %d//%d %d//%d %d//%d
-			// f  1//2   4//3   3//5   5//3
-			else if (slashCount == 8 && containsDoubleSlash)
-			{
-				sscanf_s(line.c_str(), "f %d//%d %d//%d %d//%d %d\\%d\n", &indices[0], &indices[4], &indices[1], &indices[5], &indices[2], &indices[6], &indices[3], &indices[7]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2], indices[0], indices[2], indices[3] });
-				normal_indices.insert(normal_indices.end(), { indices[4], indices[5], indices[6], indices[4], indices[6], indices[7] });
-			}
-			// TODO other 3 square methods
-
-			// case 6
-			// vertex and texture coord, square
-			// f %d %d %d %d
-			// f  1  2  3  4
-			else if (slashCount == 4)
-			{
-				sscanf_s(line.c_str(), "f %d/%d %d/%d %d/%d %d/%d\n", &indices[0], &indices[8], &indices[1], &indices[9], &indices[2], &indices[10], &indices[3], &indices[11]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2], indices[0], indices[2], indices[3] });
-				uv_indices.insert(uv_indices.end(), { indices[8], indices[9], indices[10], indices[8], indices[10], indices[11] });
-			}
-			// case 7
-			// vertex, texture coord and normal, square
-			// f %d/%d/%d %d/%d/%d %d/%d/%d %d/%d/%d
-			// f  1/1/1     2/2/2    3/3/3    4/4/4
-			else if (slashCount == 8)
-			{
-				sscanf_s(line.c_str(), "f %d/%d/%d %d/%d/%d %d/%d/%d %d/%d/%d\n", &indices[0], &indices[4], &indices[8], &indices[1], &indices[5], &indices[9], &indices[2], &indices[6], &indices[10], &indices[3], &indices[7], &indices[11]);
-				vertex_indices.insert(vertex_indices.end(), { indices[0], indices[1], indices[2], indices[0], indices[2], indices[3] });
-				uv_indices.insert(uv_indices.end(), { indices[4], indices[5], indices[6], indices[4], indices[6], indices[7] });
-				normal_indices.insert(normal_indices.end(), { indices[8], indices[9], indices[10], indices[8], indices[10], indices[11] });
-			}
-
-
-			else
-			{
-				std::cout << "bruh" << std::endl;
-				continue;
-			}
-
+	for (const OBJMeshPart& part : mesh_parts) {
+		const GLuint offset = static_cast<GLuint>(vertices.size());
+		vertices.insert(vertices.end(), part.vertices.begin(), part.vertices.end());
+		for (GLuint idx : part.indices) {
+			indices.push_back(offset + idx);
 		}
 	}
 
-	if (vertex_indices.size() != normal_indices.size())
-	{
-		throw std::exception("Non-matching sizes of indices");
-	}
-
-	// get number of triangles
-	auto triangle_count = vertex_indices.size();
-
-	//
-	for (unsigned int u = 0; u < triangle_count; u++) {
-		Vertex vertex{};
-		vertex.position = temp_vertices[vertex_indices[u] - 1];
-		vertex.tex_coords = temp_uvs[uv_indices[u] - 1];
-		vertex.normal = temp_normals[normal_indices[u] - 1];
-		vertices.push_back(vertex);
-		indices.push_back(u);
-	}
-
-	// Print done
-	std::cout << "LoadOBJFile: Loaded OBJ file " << filename;
-
-	std::cout << "Model loaded: " << filename.string() << std::endl;
-
-	return true;
+	return !vertices.empty() && !indices.empty();
 }

@@ -11,14 +11,16 @@
 
 ## Adam
 - [ ] zkusit upravit UI
-- [ ] najít a nahrát 3D modely planet
-    - [ ] zkusit prstence jestli budou fungovat
-    - [ ] najít ke každé zvuk co z ní bude hrát
+- [x] najít a nahrát 3D modely planet
+    - [x] zkusit prstence jestli budou fungovat
+    - [x] najít ke každé zvuk co z ní bude hrát
 - [ ] najít background sound
-- [ ] přepínání rychlosti letu + zobrazovač v UI
-- [ ] teleport mezi planetami + nabindovat na nějaké tlačítko
-- [ ] MMB: reset FOV na základní hodnotu
-- [ ] PLUS a MINUS: pohyb s rychlostí jakou planety obíhají
-- [ ] udělat kolize hráče s planetou
-    - [ ] (hlídat aby vzdálenost mezi hráčem a středem planety nebyl menší než poloměr)
+- [x] přepínání rychlosti letu + zobrazovač v UI
+- [x] teleport mezi planetami + nabindovat na nějaké tlačítko
+- [x] MMB: reset FOV na základní hodnotu
+- [x] UP a DOWN: pohyb s rychlostí jakou planety obíhají
+- [x] SHIFT a SPACE: lítání dolu a nahoru
+- [x] CTRL: sprint
+- [x] udělat kolize hráče s planetou
+    - [X] (hlídat aby vzdálenost mezi hráčem a středem planety nebyl menší než poloměr)
 - [ ] světla: ambient, directional, reflector
