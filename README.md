@@ -8,6 +8,7 @@
 - [x] přenést skybox z PG2
 - [ ] umístit planety na správné pozice
     - [x] nastavit jim pohyb (otáčení a rotace kolem slunce), rychlost nastavitelná
+- [ ] zkusit snížit paměťovou náročnost
 
 ## Adam
 - [ ] zkusit upravit UI
