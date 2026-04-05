@@ -196,3 +196,70 @@ std::vector<uchar> lossy_bw_limit(const cv::Mat& frame, size_t size_limit)
 
     return bytes;
 }
+
+void draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int size)
+{
+    center_normalized.x = std::clamp(center_normalized.x, 0.0f, 1.0f);
+    center_normalized.y = std::clamp(center_normalized.y, 0.0f, 1.0f);
+    size = std::clamp(size, 1, std::min(img.cols, img.rows));
+
+    cv::Point2f center_absolute(center_normalized.x * img.cols, center_normalized.y * img.rows);
+
+    cv::Point2f p1(center_absolute.x - size / 2, center_absolute.y);
+    cv::Point2f p2(center_absolute.x + size / 2, center_absolute.y);
+    cv::Point2f p3(center_absolute.x, center_absolute.y - size / 2);
+    cv::Point2f p4(center_absolute.x, center_absolute.y + size / 2);
+
+    cv::line(img, p1, p2, CV_RGB(255, 0, 0), 3);
+    cv::line(img, p3, p4, CV_RGB(255, 0, 0), 3);
+}
+
+cv::Point2f find_face(cv::Mat& frame, cv::CascadeClassifier face_cascade)
+{
+    cv::Point2f center(0.0f, 0.0f);
+
+    cv::Mat scene_grey;
+    cv::cvtColor(frame, scene_grey, cv::COLOR_BGR2GRAY);
+
+    std::vector<cv::Rect> faces;
+    face_cascade.detectMultiScale(scene_grey, faces);
+
+    if (faces.size() > 0)
+    {
+
+        // compute "center" as normalized coordinates of the face
+        cv::Rect rect = faces[0];
+        center.x = (rect.x + rect.width / 2.0f) / frame.cols;
+        center.y = (rect.y + rect.height / 2.0f) / frame.rows;
+    }
+
+    std::cout << "found normalized center: " << center << std::endl;
+
+    return center;
+}
+
+std::vector<cv::Point2f> find_faces(cv::Mat& frame, cv::CascadeClassifier face_cascade)
+{
+    std::vector<cv::Point2f> centers;
+
+    cv::Mat scene_grey;
+    cv::cvtColor(frame, scene_grey, cv::COLOR_BGR2GRAY);
+
+    std::vector<cv::Rect> faces;
+    face_cascade.detectMultiScale(scene_grey, faces);
+
+
+    if (faces.size() > 0)
+    {
+        for (const cv::Rect& rect : faces)
+        {
+            // compute "center" as normalized coordinates of the face
+            cv::Point2f center(0.0f, 0.0f);
+            center.x = (rect.x + rect.width / 2.0f) / frame.cols;
+            center.y = (rect.y + rect.height / 2.0f) / frame.rows;
+            centers.push_back(center);
+        }
+    }
+
+    return centers;
+}

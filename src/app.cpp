@@ -35,80 +35,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-
 // local stuff
 #include "app.hpp"
 #include "utils.hpp"
 #include "fpsmeter.hpp"
 #include "dequeue.hpp"
 #include "shaders/OBJLoader.hpp"
-
-void App::draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int size)
-{
-    center_normalized.x = std::clamp(center_normalized.x, 0.0f, 1.0f);
-    center_normalized.y = std::clamp(center_normalized.y, 0.0f, 1.0f);
-    size = std::clamp(size, 1, std::min(img.cols, img.rows));
-
-    cv::Point2f center_absolute(center_normalized.x * img.cols, center_normalized.y * img.rows);
-
-    cv::Point2f p1(center_absolute.x - size / 2, center_absolute.y);
-    cv::Point2f p2(center_absolute.x + size / 2, center_absolute.y);
-    cv::Point2f p3(center_absolute.x, center_absolute.y - size / 2);
-    cv::Point2f p4(center_absolute.x, center_absolute.y + size / 2);
-
-    cv::line(img, p1, p2, CV_RGB(255, 0, 0), 3);
-    cv::line(img, p3, p4, CV_RGB(255, 0, 0), 3);
-}
-
-cv::Point2f App::find_face(cv::Mat& frame)
-{
-    cv::Point2f center(0.0f, 0.0f);
-
-    cv::Mat scene_grey;
-    cv::cvtColor(frame, scene_grey, cv::COLOR_BGR2GRAY);
-
-    std::vector<cv::Rect> faces;
-    face_cascade.detectMultiScale(scene_grey, faces);
-
-    if (faces.size() > 0)
-    {
-
-        // compute "center" as normalized coordinates of the face
-        cv::Rect rect = faces[0];
-        center.x = (rect.x + rect.width / 2.0f) / frame.cols;
-        center.y = (rect.y + rect.height / 2.0f) / frame.rows;
-    }
-
-    std::cout << "found normalized center: " << center << std::endl;
-
-    return center;
-}
-
-std::vector<cv::Point2f> App::find_faces(cv::Mat& frame)
-{
-    std::vector<cv::Point2f> centers;
-
-    cv::Mat scene_grey;
-    cv::cvtColor(frame, scene_grey, cv::COLOR_BGR2GRAY);
-
-    std::vector<cv::Rect> faces;
-    face_cascade.detectMultiScale(scene_grey, faces);
-
-
-    if (faces.size() > 0)
-    {
-        for (const cv::Rect& rect : faces)
-        {
-            // compute "center" as normalized coordinates of the face
-            cv::Point2f center(0.0f, 0.0f);
-            center.x = (rect.x + rect.width / 2.0f) / frame.cols;
-            center.y = (rect.y + rect.height / 2.0f) / frame.rows;
-            centers.push_back(center);
-        }
-    }
-
-    return centers;
-}
 
 App::App()
 {
@@ -133,20 +65,6 @@ int App::run(void)
         // Clear color saved to OpenGL state machine: no need to set repeatedly in game loop
         glClearColor(0, 0, 0, 0);
 
-        GLfloat r, g, b, a;
-        r = g = b = a = 1.0f; //white color
-
-        // random coloring setup
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::normal_distribution<> dist(0, 0.01);
-
-
-        // Activate shader program. There is only one program, so activation can be out of the loop. 
-        // In more realistic scenarios, you will activate different shaders for different 3D objects.
-
-        // Get uniform location in GPU program. This will not change, so it can be moved out of the game loop.
-
         // get first position of mouse cursor
         glfwGetCursorPos(window, &cursor_last_x, &cursor_last_y);
 
@@ -154,6 +72,14 @@ int App::run(void)
 
         width = fb_width;
         height = fb_height;
+
+        // camera stuff
+        cv::Mat camera_frame, camera_scene;
+        std::thread detection(&App::tracker_thread, this, std::ref(capture));
+        fps_meter FPS_worker;
+
+        // initialize 
+        init_webcam_tex(capture.get(cv::CAP_PROP_FRAME_HEIGHT), capture.get(cv::CAP_PROP_FRAME_WIDTH));
 
         while (!glfwWindowShouldClose(window))
         {
@@ -170,12 +96,12 @@ int App::run(void)
 
             // set shader uniforms once (if all models use same shader)
             auto current_shader = shader_library.at("simple_shader");
-            //set transformations
+
+            // set transformations
             if (scene_in_focus) {
                 glm::vec3 movement = camera.process_input(window, delta_t);
                 camera.position += movement;
             }
-            //std::cout << movement << std::endl;
 
             // set uniforms for shader - common for all objects (do not set for each object individually, they use same shader anyway)
             current_shader->setUniform("uV_m", camera.get_view_matrix());
@@ -188,6 +114,7 @@ int App::run(void)
             // unbind framebuffer
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+            // disable ImGui inputs if scene is in focus
             auto& io = ImGui::GetIO();
 
             if (scene_in_focus) {
@@ -232,7 +159,7 @@ int App::run(void)
                 ImVec2(1, 0)
             );
             ImGui::EndChild();
-            
+
             float info_width = 0.4f;
 
             // info panel 
@@ -275,7 +202,26 @@ int App::run(void)
             ImGui::SetCursorPosY(scene_height * 0.5 + camera_offset_y);
             ImGui::BeginChild("CameraPanel", ImVec2(window_width - scene_width - 8, scene_height * 0.5), true);
             ImGui::Text("Camera");
-            //ImGui::Image(cameraTex, ImVec2(cameraWidth, topHeight - 20));
+
+            if (frames_available) {
+                frames_available = false;
+                camera_frame = frame_buffer.pop_back();
+                int chann_count = camera_frame.channels();
+
+                if (detections.size() > 0) {
+                    for (const cv::Point2f& center : detections) {
+                        draw_cross_normalized(camera_frame, center, 30);
+                    }
+                }
+                if (FPS_worker.is_updated())
+                    std::cout << "FPS: " << FPS_worker.get() << std::endl;
+                FPS_worker.update();
+            }
+            // upload to GPU
+            glTextureSubImage2D(webcam_tex, 0, 0, 0, camera_frame.cols, camera_frame.rows, GL_BGR, GL_UNSIGNED_BYTE, camera_frame.data);
+            // display on imgui
+            ImGui::Image(webcam_tex, ImVec2(camera_frame.cols, camera_frame.rows));
+
             ImGui::EndChild();
             
             // console part of the main window
@@ -288,11 +234,6 @@ int App::run(void)
                 ImGui::TextUnformatted(console_lines[i].c_str());
             }
             
-
-            //if (scrollToBottom)
-            //    ImGui::SetScrollHereY(1.0f);
-
-            //scrollToBottom = false;
             ImGui::EndChild();
 
             // Input field
@@ -322,28 +263,6 @@ int App::run(void)
             // poll events
             glfwPollEvents();
 
-
-            // triange color logc
-            r += dist(gen);
-            g += dist(gen);
-            b += dist(gen);
-
-            r = std::clamp(r, 0.0f, 1.0f);
-            g = std::clamp(g, 0.0f, 1.0f);
-            b = std::clamp(b, 0.0f, 1.0f);
-
-
-            //if (show_info) {
-            //    ImGui::SetNextWindowPos(ImVec2(10, 10));
-            //    ImGui::SetNextWindowSize(ImVec2(250, 100));
-            //
-            //    ImGui::Begin("Info", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-            //    ImGui::Text("V-Sync: %s", is_vsync_on ? "ON" : "OFF");
-            //    ImGui::Text("FPS: %.1f", FPS);
-            //    ImGui::Text("(press RMB to release mouse)");
-            //    ImGui::Text("(hit D to show/hide info)");
-            //    ImGui::End();
-            //}
             // Time/FPS measurement
             now = glfwGetTime();
             delta_t = now - frame_begin_timepoint; //compute delta_t
@@ -356,13 +275,14 @@ int App::run(void)
                 fps_counter_frames = 0;
                 std::cout << "\r[FPS]" << fps << "     "; // Compare: FPS with/without ImGUI
             }
-            //glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
+        detection.join();
     }
     catch (std::exception const& e) {
         std::cerr << "App failed : " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
+
 
     return EXIT_SUCCESS;
 }
@@ -612,7 +532,7 @@ void App::tracker_thread(cv::VideoCapture& capture) {
         // if a suitable compression was found
         if (bytes.size() > 0)
         {
-            //compressed_frame = cv::imdecode(bytes, cv::IMREAD_ANYCOLOR);
+            compressed_frame = cv::imdecode(bytes, cv::IMREAD_ANYCOLOR);
 
             auto size_compressed = bytes.size();
             auto size_uncompressed = frame.elemSize() * frame.total();
@@ -620,10 +540,10 @@ void App::tracker_thread(cv::VideoCapture& capture) {
 
             std::cout << "Size: uncompressed = " << size_uncompressed << ", compressed = " << size_compressed << ", = " << size_compressed / (size_uncompressed / 100.0) << "% \n";
             // find faces and pass the data to main thread
-            //std::vector<cv::Point2f> centers = find_faces(compressed_frame);
+            std::vector<cv::Point2f> centers = find_faces(compressed_frame, face_cascade);
             {
                 std::lock_guard<std::mutex> lock(buffer_mutex);
-            //    detections = centers;
+                detections = centers;
             }
         }
     }
@@ -705,6 +625,7 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
         switch (key) {
         case GLFW_KEY_ESCAPE:
             // Exit The App
+            this_inst->terminate = true;
             glfwSetWindowShouldClose(window, GLFW_TRUE);
             break;
 
@@ -983,4 +904,15 @@ void App::toggle_aliasing(void) {
     else {
         glDisable(GL_MULTISAMPLE);
     }
+}
+
+void App::init_webcam_tex(int rows, int cols) {
+    glCreateTextures(GL_TEXTURE_2D, 1, &webcam_tex);
+
+    glTextureStorage2D(webcam_tex, 1, GL_RGB8, cols, rows);
+
+    glTextureParameteri(webcam_tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(webcam_tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(webcam_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(webcam_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }

@@ -2,7 +2,7 @@
 
 ## Ondřej
 - [x] fixnout konzoli dole
-- [ ] zprovoznit webkameru vpravo + oddělit kód do samostatného souboru
+- [x] zprovoznit webkameru vpravo + oddělit kód do samostatného souboru
     - [ ] dodělat multi thread + synchronization
 - [ ] fixnout antialiasing 
 - [ ] přenést skybox z PG2
