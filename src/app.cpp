@@ -116,6 +116,8 @@ std::vector<App::PlanetParams> create_default_planets_params()
 }
 }
 
+
+
 App::App()
     : planets_params(create_default_planets_params())
 {
@@ -172,8 +174,22 @@ int App::run(void)
             // clear existing
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+            // first to render - skybox
+            glDepthFunc(GL_LEQUAL);   // allow skybox at depth = 1.0
+            glDepthMask(GL_FALSE);    // disable depth writes
+            int skybox_tex_unit = 1;
+            ShaderProgram* skybox_shader = shader_library.at("skybox_shader").get();
+            skybox_shader->use();
+            skybox_shader->setUniform("uV_m", glm::mat4(glm::mat3(camera.get_view_matrix())));
+            skybox_shader->setUniform("uP_m", projection_matrix);
+            skybox_shader->setUniform("cubemap", skybox_tex_unit);
+            texture_library.at("skybox_tex").get()->bind(skybox_tex_unit);
+            mesh_library.at("skybox").get()->draw();
+            glDepthMask(GL_TRUE);
+            glEnable(GL_BLEND);
+
             // set shader uniforms once (if all models use same shader)
-            auto current_shader = shader_library.at("simple_shader");
+            auto main_shader = shader_library.at("simple_shader");
             //set transformations
             update_planets(static_cast<float>(delta_t));
             if (scene_in_focus) {
@@ -185,8 +201,8 @@ int App::run(void)
             //std::cout << movement << std::endl;
 
             // set uniforms for shader - common for all objects (do not set for each object individually, they use same shader anyway)
-            current_shader->setUniform("uV_m", camera.get_view_matrix());
-            current_shader->setUniform("uP_m", projection_matrix);
+            main_shader->setUniform("uV_m", camera.get_view_matrix());
+            main_shader->setUniform("uP_m", projection_matrix);
 
             for (auto& [name, model] : scene) {
                 model.draw();
@@ -462,6 +478,7 @@ void App::init_assets(void) {
     shader_library.clear();
     texture_library.clear();
 
+    // default shader
     shader_library.emplace(
         "simple_shader",
         std::make_shared<ShaderProgram>(
@@ -471,6 +488,21 @@ void App::init_assets(void) {
 
     Texture::init_chkboard();
 
+    // skybox shader
+    shader_library.emplace(
+        "skybox_shader",
+        std::make_shared<ShaderProgram>(
+            std::filesystem::path("resources/shaders/skybox.vert"),
+            std::filesystem::path("resources/shaders/skybox.frag")
+        )
+    );
+
+    // skybox model setup
+    setup_skybox_mesh();
+    setup_skybox_tex();
+    //skybox.addMesh(mesh_library.at("skybox"), shader_library.at("skybox_shader"), texture_library.at("skybox_tex"));
+
+    // Planet setup
     for (const auto& params : planets_params) {
         get_or_load_texture(params.default_texture_path);
         for (const auto& [_, texture_path] : params.material_textures) {
@@ -537,6 +569,8 @@ void App::init_assets(void) {
             throw std::runtime_error("Failed to load audio: " + params.audio_path.string());
         }
     }
+
+
 }
 
 std::shared_ptr<Texture> App::get_or_load_texture(const std::filesystem::path& path)
@@ -1283,4 +1317,57 @@ void App::toggle_aliasing(void) {
     else {
         glDisable(GL_MULTISAMPLE);
     }
+}
+
+void App::setup_skybox_mesh(void) {
+    Vertex skyboxVertices[] = {
+        Vertex{ glm::vec3(-1.0f, 1.0f, -1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(-1.0f, -1.0f, -1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(1.0f, -1.0f, -1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(1.0f, 1.0f, -1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(-1.0f, 1.0f, 1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(-1.0f, -1.0f,  1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(1.0f, -1.0f,  1.0f), glm::vec3(0), glm::vec2(0) },
+        Vertex{ glm::vec3(1.0f,  1.0f,  1.0f), glm::vec3(0), glm::vec2(0) }
+    };
+
+
+    GLuint skyboxIndices[] = {
+        // Right face
+        3, 2, 6,
+        6, 7, 3,
+        // Left face
+        0, 4, 5,
+        5, 1, 0,
+        // Top face
+        0, 3, 7,
+        7, 4, 0,
+        // Bottom face
+        1, 5, 6,
+        6, 2, 1,
+        // Back face
+        0, 1, 2,
+        2, 3, 0,
+        // Front face
+        4, 7, 6,
+        6, 5, 4
+    };
+
+    std::vector<Vertex> skyboxVerticesVector(skyboxVertices, skyboxVertices + sizeof skyboxVertices / sizeof skyboxVertices[0]);
+    std::vector<GLuint> skyboxIndicesVector(skyboxIndices, skyboxIndices + sizeof skyboxIndices / sizeof skyboxIndices[0]);
+
+    mesh_library.emplace("skybox", std::make_shared<Mesh>(skyboxVerticesVector, skyboxIndicesVector, GL_TRIANGLES));
+}
+
+void App::setup_skybox_tex(void) {
+    std::vector<std::filesystem::path> skybox_texs = {
+        "resources/textures/skybox_px.png",
+        "resources/textures/skybox_nx.png",
+        "resources/textures/skybox_py.png",
+        "resources/textures/skybox_ny.png",
+        "resources/textures/skybox_pz.png",
+        "resources/textures/skybox_nz.png"
+    };
+
+    texture_library.emplace("skybox_tex", std::make_shared<Texture>(skybox_texs));
 }

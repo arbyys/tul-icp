@@ -3,11 +3,11 @@
 ## Ondřej
 - [x] fixnout konzoli dole
 - [x] zprovoznit webkameru vpravo + oddělit kód do samostatného souboru
-    - [ ] dodělat multi thread + synchronization
+    - [x] dodělat multi thread + synchronization
 - [ ] fixnout antialiasing 
-- [ ] přenést skybox z PG2
+- [x] přenést skybox z PG2
 - [ ] umístit planety na správné pozice
-    - [ ] nastavit jim pohyb (otáčení a rotace kolem slunce), rychlost nastavitelná
+    - [x] nastavit jim pohyb (otáčení a rotace kolem slunce), rychlost nastavitelná
 
 ## Adam
 - [ ] zkusit upravit UI

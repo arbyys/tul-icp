@@ -36,7 +36,62 @@ cv::Mat Texture::load_image(const std::filesystem::path& path) {
     return image;
 }
 
+std::vector<cv::Mat> Texture::load_images(const std::vector<std::filesystem::path>& paths) {
+    std::vector<cv::Mat> images;
+    for (unsigned int i = 0; i < paths.size(); i++)
+    {
+        cv::Mat image = cv::imread(paths[i].string(), cv::IMREAD_UNCHANGED);
+        if (image.empty())
+        {
+            std::cerr << "no texture: " << paths[i] << std::endl;
+            exit(1);
+        }
+        images.push_back(image);
+    }
+
+    return images;
+}
+
+
 Texture::Texture(const std::filesystem::path& path, Interpolation interpolation) : Texture{ load_image(path), interpolation } {}
+
+Texture::Texture(const std::vector<std::filesystem::path>& paths, Interpolation interpolation) {
+    std::vector<cv::Mat> faces = load_images(paths);
+
+    int width = faces[0].cols;
+    int height = faces[0].rows;
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &name_);
+    glTextureStorage2D(name_, 1, GL_RGB8, width, height);
+
+    for (unsigned int i = 0; i < faces.size(); i++)
+    {
+        cv::Mat image = faces[i];
+        if (!image.empty())
+        {
+            unsigned char* data = image.data;
+
+            glTextureSubImage3D(
+                name_,
+                0,
+                0, 0, i,
+                width, height, 1,
+                GL_BGRA,
+                GL_UNSIGNED_BYTE,
+                data
+            );
+        }
+        else
+        {
+            std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+        }
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+}
 
 Texture::Texture(const glm::vec3& vec) : Texture{ cv::Mat{1, 1, CV_8UC3, cv::Scalar{vec.b, vec.g, vec.r}}, Interpolation::nearest } {}
 
@@ -100,8 +155,8 @@ GLuint Texture::get_name() const {
     return name_;
 }
 
-void Texture::bind(void) {
-    glBindTextureUnit(0, name_); // bind to some texturing unit, e.g. 0
+void Texture::bind(int unit) {
+    glBindTextureUnit(unit, name_); // bind to some texturing unit, e.g. 0
 }
 
 void Texture::set_interpolation(Interpolation interpolation) {

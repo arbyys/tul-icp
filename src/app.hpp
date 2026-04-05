@@ -126,6 +126,10 @@ private:
     int orbit_speed_placeholder = 0;
     std::size_t next_teleport_index = 0;
 
+    // skybox stuff
+    void setup_skybox_mesh(void);
+    void setup_skybox_tex(void);
+
     // init stuff
     void init_opencv();
     void init_glew(void);

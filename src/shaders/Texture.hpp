@@ -20,10 +20,11 @@ public:
     Texture(const glm::vec3& vec); // synthetic single-color RGB texture
     Texture(const glm::vec4& vec); // synthetic single-color RGBA texture
     Texture(const std::filesystem::path& path, Interpolation interpolation = Interpolation::linear_mipmap_linear);
+    Texture(const std::vector<std::filesystem::path>& paths, Interpolation interpolation = Interpolation::linear_mipmap_linear); // multiple images = skybox
 
     ~Texture();
 
-    void bind(void);
+    void bind(int unit = 0);
     GLuint get_name() const;
     int get_height(void);
     int get_width(void);
@@ -32,6 +33,7 @@ public:
     static void init_chkboard(void);
 private:
     cv::Mat load_image(const std::filesystem::path& path);
+    std::vector<cv::Mat> load_images(const std::vector<std::filesystem::path>& paths);
     static GLuint gen_ckboard(void);  // create default texture
     static inline GLuint ckboard_; // class-shared ckboard variable. gen_ckboard() is called just once.
     GLuint name_{ ckboard_ }; // set default-constructed texture to ckboard pattern
