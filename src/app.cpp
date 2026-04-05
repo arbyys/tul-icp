@@ -855,6 +855,7 @@ void App::glfw_key_callback(GLFWwindow* window, int key, int scancode, int actio
             else {
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             }
+            break;
 
         default:
             break;
