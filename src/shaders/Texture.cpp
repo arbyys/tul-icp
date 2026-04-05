@@ -48,30 +48,42 @@ Texture::Texture(cv::Mat const& image, Interpolation interpolation)
         throw std::runtime_error{ "the input image is empty" };
     }
 
-    cv::flip(image, image, 0);  // OpenGL vs. Window coordinates...
+    cv::Mat upload_image = image;
+    if (!upload_image.isContinuous()) {
+        upload_image = upload_image.clone();
+    }
+
+    cv::flip(upload_image, upload_image, 0);  // OpenGL vs. Window coordinates...
 
     glCreateTextures(GL_TEXTURE_2D, 1, &name_);
 
-    switch (image.type()) {
+    GLint previous_unpack_alignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_unpack_alignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    switch (upload_image.type()) {
     case CV_8UC1: // single channel image - greyscale
         // upload only one channel
-        glTextureStorage2D(name_, 1, GL_R8, image.cols, image.rows);
-        glTextureSubImage2D(name_, 0, 0, 0, image.cols, image.rows, GL_RED, GL_UNSIGNED_BYTE, image.data);
+        glTextureStorage2D(name_, 1, GL_R8, upload_image.cols, upload_image.rows);
+        glTextureSubImage2D(name_, 0, 0, 0, upload_image.cols, upload_image.rows, GL_RED, GL_UNSIGNED_BYTE, upload_image.data);
         // use data also for other channels
         glTextureParameteri(name_, GL_TEXTURE_SWIZZLE_G, GL_RED);
         glTextureParameteri(name_, GL_TEXTURE_SWIZZLE_B, GL_RED);
         break;
     case CV_8UC3:  // RGB
-        glTextureStorage2D(name_, 1, GL_RGB8, image.cols, image.rows);
-        glTextureSubImage2D(name_, 0, 0, 0, image.cols, image.rows, GL_BGR, GL_UNSIGNED_BYTE, image.data);
+        glTextureStorage2D(name_, 1, GL_RGB8, upload_image.cols, upload_image.rows);
+        glTextureSubImage2D(name_, 0, 0, 0, upload_image.cols, upload_image.rows, GL_BGR, GL_UNSIGNED_BYTE, upload_image.data);
         break;
     case CV_8UC4:  // RGBA
-        glTextureStorage2D(name_, 1, GL_RGBA8, image.cols, image.rows);
-        glTextureSubImage2D(name_, 0, 0, 0, image.cols, image.rows, GL_BGRA, GL_UNSIGNED_BYTE, image.data);
+        glTextureStorage2D(name_, 1, GL_RGBA8, upload_image.cols, upload_image.rows);
+        glTextureSubImage2D(name_, 0, 0, 0, upload_image.cols, upload_image.rows, GL_BGRA, GL_UNSIGNED_BYTE, upload_image.data);
         break;
     default:
+        glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
         throw std::runtime_error{ "unsupported number of channels or channel depth in texture" };
     }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
 
     set_interpolation(interpolation);
 
@@ -133,8 +145,13 @@ int Texture::get_width(void) {
 void Texture::replace_image(const cv::Mat& image) {
     // immutable texture format used: only content can be changed (size and data format MUST match)
 
+    cv::Mat upload_image = image;
+    if (!upload_image.isContinuous()) {
+        upload_image = upload_image.clone();
+    }
+
     // check size
-    if ((image.rows != get_height()) || (image.cols != get_width()))
+    if ((upload_image.rows != get_height()) || (upload_image.cols != get_width()))
         throw std::runtime_error("improper image replacement size");
 
     // check channels and format
@@ -142,23 +159,36 @@ void Texture::replace_image(const cv::Mat& image) {
     int basemiplevel = 0; // base image
     glGetTextureLevelParameteriv(name_, basemiplevel, GL_TEXTURE_INTERNAL_FORMAT, &tex_format);
 
-    switch (image.type()) {
+    GLint previous_unpack_alignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_unpack_alignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    switch (upload_image.type()) {
     case CV_8UC1: // single channel image - greyscale
-        if (tex_format != GL_R8)
+        if (tex_format != GL_R8) {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
             throw std::runtime_error("improper image replacement channel data, GL_R8 was the original");
-        glTextureSubImage2D(name_, 0, 0, 0, image.cols, image.rows, GL_RED, GL_UNSIGNED_BYTE, image.data);
+        }
+        glTextureSubImage2D(name_, 0, 0, 0, upload_image.cols, upload_image.rows, GL_RED, GL_UNSIGNED_BYTE, upload_image.data);
         break;
     case CV_8UC3:  // RGB
-        if (tex_format != GL_RGB8)
+        if (tex_format != GL_RGB8) {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
             throw std::runtime_error("improper image replacement channel data, GL_RGB8 was the original");
-        glTextureSubImage2D(name_, 0, 0, 0, image.cols, image.rows, GL_BGR, GL_UNSIGNED_BYTE, image.data);
+        }
+        glTextureSubImage2D(name_, 0, 0, 0, upload_image.cols, upload_image.rows, GL_BGR, GL_UNSIGNED_BYTE, upload_image.data);
         break;
     case CV_8UC4:  // RGBA
-        if (tex_format != GL_RGBA8)
+        if (tex_format != GL_RGBA8) {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
             throw std::runtime_error("improper image replacement channel data, GL_RGBA8 was the original");
-        glTextureSubImage2D(name_, 0, 0, 0, image.cols, image.rows, GL_BGRA, GL_UNSIGNED_BYTE, image.data);
+        }
+        glTextureSubImage2D(name_, 0, 0, 0, upload_image.cols, upload_image.rows, GL_BGRA, GL_UNSIGNED_BYTE, upload_image.data);
         break;
     default:
+        glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
         throw std::runtime_error{ "unsupported number of channels or channel depth in texture" };
     }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
 }

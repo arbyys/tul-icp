@@ -8,6 +8,11 @@
 class Camera
 {
 public:
+    enum class FlightSpeedTier {
+        Slow,
+        Normal,
+        Fast
+    };
 
     // Camera Attributes
     glm::vec3 position{};
@@ -20,8 +25,9 @@ public:
     GLfloat roll = 0.0f;
 
     // Camera options
-    GLfloat movement_speed = 1.0f;
+    GLfloat movement_speed = 8.0f;
     GLfloat mouse_sensitivity = 0.25f;
+    FlightSpeedTier flight_speed_tier = FlightSpeedTier::Normal;
 
     Camera() {
         // Default constructor initializes camera's position and orientation
@@ -43,6 +49,7 @@ public:
     glm::vec3 process_input(GLFWwindow* window, GLfloat deltaTime)
     {
         glm::vec3 direction{ 0 };
+        const glm::vec3 world_up(0.0f, 1.0f, 0.0f);
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             direction += front; // add unit vector to final direction  
@@ -56,9 +63,46 @@ public:
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
             direction += right;
 
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+            direction += world_up;
 
-        glm::vec3 movement = direction == glm::vec3(0) ? glm::vec3(0) : glm::normalize(direction)* movement_speed* deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+            direction -= world_up;
+
+        GLfloat sprint_multiplier = 1.0f;
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)
+            sprint_multiplier = 1.75f;
+
+        glm::vec3 movement = direction == glm::vec3(0)
+            ? glm::vec3(0)
+            : glm::normalize(direction) * movement_speed * get_flight_speed_multiplier() * sprint_multiplier * deltaTime;
         return movement;
+    }
+
+    void cycle_flight_speed_tier()
+    {
+        if (flight_speed_tier == FlightSpeedTier::Slow) {
+            flight_speed_tier = FlightSpeedTier::Normal;
+        }
+        else if (flight_speed_tier == FlightSpeedTier::Normal) {
+            flight_speed_tier = FlightSpeedTier::Fast;
+        }
+        else {
+            flight_speed_tier = FlightSpeedTier::Slow;
+        }
+    }
+
+    const char* get_flight_speed_tier_label() const
+    {
+        switch (flight_speed_tier) {
+        case FlightSpeedTier::Slow:
+            return "SLOW";
+        case FlightSpeedTier::Fast:
+            return "FAST";
+        case FlightSpeedTier::Normal:
+        default:
+            return "NORMAL";
+        }
     }
 
     void process_mouse_movement(GLfloat xoffset, GLfloat yoffset, GLboolean constraintPitch = GL_TRUE)
@@ -81,6 +125,19 @@ public:
     }
 
 private:
+    GLfloat get_flight_speed_multiplier() const
+    {
+        switch (flight_speed_tier) {
+        case FlightSpeedTier::Slow:
+            return 0.75f;
+        case FlightSpeedTier::Fast:
+            return 5.0f;
+        case FlightSpeedTier::Normal:
+        default:
+            return 2.0f;
+        }
+    }
+
     void update_camera_vectors() {
         glm::vec3 front;
         front.x = cos(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));

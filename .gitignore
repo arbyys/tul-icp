@@ -79,6 +79,7 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+!resources/models/planets/*.obj
 *.iobj
 *.pch
 *.pdb

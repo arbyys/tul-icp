@@ -32,7 +32,7 @@ private:
         glm::mat4 t = glm::translate(glm::mat4(1.0f), origin);
         glm::mat4 rotm = glm::yawPitchRoll(glm::radians(eA.y), glm::radians(eA.x), glm::radians(eA.z)); //yaw, pitch, roll
         glm::mat4 s = glm::scale(glm::mat4(1.0f), scale);
-        return s * rotm * t;
+        return t * rotm * s;
     }
 
     float wrap_angle(float angle) { // wrap any float to [0, 360)
@@ -74,6 +74,10 @@ public:
     void setPosition(const glm::vec3& new_position) {
         pivot_position = new_position;
         local_model_matrix = createMM(pivot_position, eulerAngles, scale);
+    }
+
+    const glm::vec3& getPosition() const {
+        return pivot_position;
     }
 
     void setEulerAngles(const glm::vec3& new_eulerAngles) {
