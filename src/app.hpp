@@ -67,12 +67,10 @@ protected:
     glm::mat4 projection_matrix = glm::identity<glm::mat4>();
     void update_projection_matrix(void);
 private:
+
     cv::VideoCapture capture;
-    void draw_cross_normalized(cv::Mat& img, cv::Point2f center_normalized, int size);
-    // object detection
     cv::CascadeClassifier face_cascade = cv::CascadeClassifier("resources/haarcascade_frontalface_default.xml");
-    cv::Point2f find_face(cv::Mat& frame);
-    std::vector<cv::Point2f> find_faces(cv::Mat& frame);
+
 
     // tracer thread loop and communication variables
     void tracker_thread(cv::VideoCapture& capture);
@@ -142,14 +140,18 @@ private:
     void init_framebuffer(void);
     void rescale_framebuffer(int width, int height);
 
-    // camera related 
+    // scene camera related 
     Camera camera;
     // remember last cursor position, move relative to that in the next frame
     double cursor_last_x{ 0 };
     double cursor_last_y{ 0 };
     
+    // webcam related
+    GLuint webcam_tex;
+    void init_webcam_tex(int rows, int cols);
+
     // in-window console stuff
-    std::vector<char*> console_lines;
+    std::vector<std::string> console_lines;
     bool scroll_to_bottom = false;
     static std::string SanitizeUTF8(const char* msg);
 
