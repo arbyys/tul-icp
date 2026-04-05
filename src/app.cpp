@@ -165,7 +165,14 @@ int App::run(void)
         {
             // draw into framebuffer
             // activate framebuffer
-            glBindFramebuffer(GL_FRAMEBUFFER, FBO_ID);
+            // if MSAA active, use MSAA FBO
+            // otherwise use resolve FBO
+            if (antialiasing_on) {
+                glBindFramebuffer(GL_FRAMEBUFFER, FBO_MSAA_ID);
+            }
+            else {
+                glBindFramebuffer(GL_FRAMEBUFFER, FBO_res_ID);
+            }
 
             //rescale_framebuffer(fb_width, fb_height);
             // set viewport to framebuffer's size
@@ -206,6 +213,16 @@ int App::run(void)
 
             for (auto& [name, model] : scene) {
                 model.draw();
+            }
+
+            // MSAA - blit to result FBO
+            if (antialiasing_on) {
+                glBlitNamedFramebuffer(
+                    FBO_MSAA_ID, FBO_res_ID,
+                    0, 0, fb_width, fb_height,
+                    0, 0, fb_width, fb_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST
+                );
             }
 
             // unbind framebuffer
@@ -250,7 +267,7 @@ int App::run(void)
             ImGui::BeginChild("ScenePanel", ImVec2(scene_width, scene_height), true, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
             ImGui::Text("Scene");
             ImGui::Image(
-                texture_id,
+                tex_res_ID,
                 ImVec2(window_width, window_height),
                 ImVec2(0, 1),
                 ImVec2(1, 0)
@@ -597,7 +614,6 @@ std::shared_ptr<Texture> App::pick_planet_texture(const PlanetParams& params, co
 
 void App::init_glfw(void)
 {
-
     /* Initialize the library */
     glfwSetErrorCallback(glfw_error_callback);
 
@@ -753,61 +769,31 @@ void App::tracker_thread(cv::VideoCapture& capture) {
 }
 
 void App::init_framebuffer() {
+    // MSAA FBO
+    glCreateFramebuffers(1, &FBO_MSAA_ID);
 
-    // Create framebuffer
-    glCreateFramebuffers(1, &FBO_ID);
+    // Multisampled color renderbuffer
+    glCreateRenderbuffers(1, &RBO_color_ID);
+    glNamedRenderbufferStorageMultisample(RBO_color_ID, antialiasing_level, GL_RGBA8, fb_width, fb_height);
+    glNamedFramebufferRenderbuffer(FBO_MSAA_ID, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, RBO_color_ID);
 
-    // --- Color texture ---
-    glCreateTextures(GL_TEXTURE_2D, 1, &texture_id);
-    glTextureStorage2D(texture_id, 1, GL_RGBA8, fb_width, fb_height);
+    // Multisampled depth renderbuffer
+    glCreateRenderbuffers(1, &RBO_depth_ID);
+    glNamedRenderbufferStorageMultisample(RBO_depth_ID, antialiasing_level, GL_DEPTH24_STENCIL8, fb_width, fb_height);
+    glNamedFramebufferRenderbuffer(FBO_MSAA_ID, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO_depth_ID);
 
-    glTextureParameteri(texture_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(texture_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    assert(glCheckNamedFramebufferStatus(FBO_MSAA_ID, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
-    // Attach texture to framebuffer
-    glNamedFramebufferTexture(FBO_ID, GL_COLOR_ATTACHMENT0, texture_id, 0);
+    // Resolve FBO
+    glCreateFramebuffers(1, &FBO_res_ID);
 
-    // --- Depth/stencil renderbuffer ---
-    glCreateRenderbuffers(1, &RBO_ID);
-    glNamedRenderbufferStorage(RBO_ID, GL_DEPTH24_STENCIL8, fb_width, fb_height);
+    glCreateTextures(GL_TEXTURE_2D, 1, &tex_res_ID);
+    glTextureStorage2D(tex_res_ID, 1, GL_RGBA8, fb_width, fb_height);
+    glTextureParameteri(tex_res_ID, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(tex_res_ID, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glNamedFramebufferTexture(FBO_res_ID, GL_COLOR_ATTACHMENT0, tex_res_ID, 0);
 
-    // Attach renderbuffer
-    glNamedFramebufferRenderbuffer(
-        FBO_ID,
-        GL_DEPTH_STENCIL_ATTACHMENT,
-        GL_RENDERBUFFER,
-        RBO_ID
-    );
-
-    // Specify draw buffers (important in DSA!)
-    GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0 };
-    glNamedFramebufferDrawBuffers(FBO_ID, 1, drawBuffers);
-
-    // Check completeness
-    if (glCheckNamedFramebufferStatus(FBO_ID, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        printf("FBO not complete!\n");
-}
-
-void App::rescale_framebuffer(int width, int height) {
-    // Resize color texture
-    glTextureStorage2D(texture_id, 1, GL_RGB8, width, height);  // immutable storage
-
-    // If you want to reset filtering (optional if it hasn't changed)
-    glTextureParameteri(texture_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(texture_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Reattach texture to framebuffer (optional, usually stays attached)
-    glNamedFramebufferTexture(FBO_ID, GL_COLOR_ATTACHMENT0, texture_id, 0);
-
-    // Resize depth/stencil renderbuffer
-    glNamedRenderbufferStorage(RBO_ID, GL_DEPTH24_STENCIL8, width, height);
-
-    // Reattach renderbuffer (optional, usually stays attached)
-    glNamedFramebufferRenderbuffer(FBO_ID, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO_ID);
-
-    // Optional: ensure draw buffers are still set
-    GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0 };
-    glNamedFramebufferDrawBuffers(FBO_ID, 1, drawBuffers);
+    assert(glCheckNamedFramebufferStatus(FBO_res_ID, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 }
 
 void App::add_console_log(const char* msg) {

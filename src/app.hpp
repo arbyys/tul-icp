@@ -92,9 +92,18 @@ private:
     GLuint shader_prog_ID{ 0 };
     GLuint VBO_ID{ 0 };
     GLuint VAO_ID{ 0 };
-    GLuint FBO_ID{ 0 };
-    GLuint RBO_ID{ 0 };
-    GLuint texture_id{ 0 };
+
+    // scene framebuffer
+    // framebuffer stuff
+    int fb_width = 1920;
+    int fb_height = 1080;
+    void init_framebuffer(void);
+    GLuint FBO_MSAA_ID{ 0 };
+    GLuint RBO_color_ID{ 0 };
+    GLuint RBO_depth_ID{ 0 };
+    GLuint FBO_res_ID{ 0 };
+    GLuint tex_res_ID{ 0 };
+
 
     // vsync enabled
     bool is_vsync_on{ true };
@@ -115,7 +124,7 @@ private:
 
     // antialiasing stuff
     bool antialiasing_on = false;
-    int antialiasing_level = 2;
+    int antialiasing_level = 4;
     void toggle_aliasing(void);
 
     // focus toggle
@@ -137,12 +146,6 @@ private:
     void init_gl_debug(void);
     void init_assets(void);
     void init_imgui(void);
-
-    // framebuffer stuff
-    int fb_width = 1920;
-    int fb_height = 1080;
-    void init_framebuffer(void);
-    void rescale_framebuffer(int width, int height);
 
     // scene camera related 
     Camera camera;
