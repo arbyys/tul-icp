@@ -154,8 +154,10 @@ int App::run(void)
         std::thread detection(&App::tracker_thread, this, std::ref(capture));
         fps_meter FPS_worker;
 
-        // initialize 
-        init_webcam_tex(capture.get(cv::CAP_PROP_FRAME_HEIGHT), capture.get(cv::CAP_PROP_FRAME_WIDTH));
+        // initialize webcam buffer
+        camera_frame = cv::Mat::zeros(capture.get(cv::CAP_PROP_FRAME_HEIGHT), capture.get(cv::CAP_PROP_FRAME_WIDTH), CV_8UC3);
+        Texture webcam_tex(camera_frame);
+
 
         while (!glfwWindowShouldClose(window))
         {
@@ -308,9 +310,10 @@ int App::run(void)
                 FPS_worker.update();
             }
             // upload to GPU
-            glTextureSubImage2D(webcam_tex, 0, 0, 0, camera_frame.cols, camera_frame.rows, GL_BGR, GL_UNSIGNED_BYTE, camera_frame.data);
+            //glTextureSubImage2D(webcam_tex, 0, 0, 0, camera_frame.cols, camera_frame.rows, GL_BGR, GL_UNSIGNED_BYTE, camera_frame.data);
+            webcam_tex.replace_image(camera_frame);
             // display on imgui
-            ImGui::Image(webcam_tex, ImVec2(camera_frame.cols, camera_frame.rows));
+            ImGui::Image(webcam_tex.get_name(), ImVec2(camera_frame.cols, camera_frame.rows));
 
             ImGui::EndChild();
             
@@ -1279,15 +1282,4 @@ void App::toggle_aliasing(void) {
     else {
         glDisable(GL_MULTISAMPLE);
     }
-}
-
-void App::init_webcam_tex(int rows, int cols) {
-    glCreateTextures(GL_TEXTURE_2D, 1, &webcam_tex);
-
-    glTextureStorage2D(webcam_tex, 1, GL_RGB8, cols, rows);
-
-    glTextureParameteri(webcam_tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(webcam_tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(webcam_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(webcam_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }

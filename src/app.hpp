@@ -145,10 +145,6 @@ private:
     // remember last cursor position, move relative to that in the next frame
     double cursor_last_x{ 0 };
     double cursor_last_y{ 0 };
-    
-    // webcam related
-    GLuint webcam_tex;
-    void init_webcam_tex(int rows, int cols);
 
     // in-window console stuff
     std::vector<std::string> console_lines;
