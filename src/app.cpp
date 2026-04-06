@@ -744,7 +744,6 @@ void App::tracker_thread(cv::VideoCapture& capture) {
         // image compression for detection
         auto bytes = lossy_quality_limit(frame, target_coefficient);
 
-        std::cout << "Target: " << target_coefficient << "\n";
         // if a suitable compression was found
         if (bytes.size() > 0)
         {
@@ -754,7 +753,6 @@ void App::tracker_thread(cv::VideoCapture& capture) {
             auto size_uncompressed = frame.elemSize() * frame.total();
             auto size_compressed_limit = size_uncompressed * target_coefficient;
 
-            std::cout << "Size: uncompressed = " << size_uncompressed << ", compressed = " << size_compressed << ", = " << size_compressed / (size_uncompressed / 100.0) << "% \n";
             // find faces and pass the data to main thread
             std::vector<cv::Point2f> centers = find_faces(compressed_frame, face_cascade);
             {
