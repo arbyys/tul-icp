@@ -65,16 +65,13 @@ Texture::Texture(const std::vector<std::filesystem::path>& paths, Interpolation 
     int width = faces[0].cols;
     int height = faces[0].rows;
     GLenum internal_format = GL_RGB8;
-    GLenum upload_format = GL_BGR;
     if (faces[0].type() == CV_8UC4) {
         internal_format = GL_RGBA8;
-        upload_format = GL_BGRA;
-    }
-    else if (faces[0].type() == CV_8UC3) {
     }
     else if (faces[0].type() == CV_8UC1) {
         internal_format = GL_R8;
-        upload_format = GL_RED;
+    }
+    else if (faces[0].type() == CV_8UC3) {
     }
     else {
         throw std::runtime_error("unsupported cubemap texture format");
@@ -143,8 +140,7 @@ Texture::Texture(const std::vector<std::filesystem::path>& paths, Interpolation 
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
 
-    glTextureParameteri(name_, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(name_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    set_interpolation(interpolation);
     glTextureParameteri(name_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(name_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTextureParameteri(name_, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
