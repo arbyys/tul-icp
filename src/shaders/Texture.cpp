@@ -7,7 +7,7 @@ GLuint Texture::gen_ckboard(void) {
 
         cv::Vec3b black{ 0, 0, 0 };
         cv::Vec3b white{ 255, 255, 255 };
-        cv::Mat ckb = cv::Mat(2, 2, CV_8UC3, black);  // 2x2 RGB pixels, default pixel color = black
+        cv::Mat ckb = cv::Mat(2, 2, CV_8UC3, black);
         ckb.at<cv::Vec3b>(0, 0) = white;
         ckb.at<cv::Vec3b>(1, 1) = white;
 
@@ -56,41 +56,98 @@ std::vector<cv::Mat> Texture::load_images(const std::vector<std::filesystem::pat
 Texture::Texture(const std::filesystem::path& path, Interpolation interpolation) : Texture{ load_image(path), interpolation } {}
 
 Texture::Texture(const std::vector<std::filesystem::path>& paths, Interpolation interpolation) {
+    if (paths.size() != 6) {
+        throw std::runtime_error("cubemap requires exactly 6 texture paths");
+    }
+
     std::vector<cv::Mat> faces = load_images(paths);
 
     int width = faces[0].cols;
     int height = faces[0].rows;
-    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &name_);
-    glTextureStorage2D(name_, 1, GL_RGB8, width, height);
-
-    for (unsigned int i = 0; i < faces.size(); i++)
-    {
-        cv::Mat image = faces[i];
-        if (!image.empty())
-        {
-            unsigned char* data = image.data;
-
-            glTextureSubImage3D(
-                name_,
-                0,
-                0, 0, i,
-                width, height, 1,
-                GL_BGRA,
-                GL_UNSIGNED_BYTE,
-                data
-            );
-        }
-        else
-        {
-            std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
-        }
+    GLenum internal_format = GL_RGB8;
+    GLenum upload_format = GL_BGR;
+    if (faces[0].type() == CV_8UC4) {
+        internal_format = GL_RGBA8;
+        upload_format = GL_BGRA;
     }
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    else if (faces[0].type() == CV_8UC3) {
+    }
+    else if (faces[0].type() == CV_8UC1) {
+        internal_format = GL_R8;
+        upload_format = GL_RED;
+    }
+    else {
+        throw std::runtime_error("unsupported cubemap texture format");
+    }
+
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &name_);
+    glTextureStorage2D(name_, 1, internal_format, width, height);
+
+    GLint previous_unpack_alignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_unpack_alignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    for (unsigned int i = 0; i < faces.size(); i++) {
+        cv::Mat image = faces[i];
+        if (image.cols != width || image.rows != height || image.type() != faces[0].type()) {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
+            throw std::runtime_error("all cubemap faces must have same size and format");
+        }
+        if (!image.isContinuous()) {
+            image = image.clone();
+        }
+
+        GLenum face_upload_format = GL_BGR;
+        if (image.type() == CV_8UC4) {
+            face_upload_format = GL_BGRA;
+        }
+        else if (image.type() == CV_8UC1) {
+            face_upload_format = GL_RED;
+        }
+
+        GLuint face_texture = 0;
+        glCreateTextures(GL_TEXTURE_2D, 1, &face_texture);
+        glTextureStorage2D(face_texture, 1, internal_format, width, height);
+        glTextureSubImage2D(
+            face_texture,
+            0,
+            0,
+            0,
+            width,
+            height,
+            face_upload_format,
+            GL_UNSIGNED_BYTE,
+            image.data
+        );
+
+        glCopyImageSubData(
+            face_texture,
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            0,
+            name_,
+            GL_TEXTURE_CUBE_MAP,
+            0,
+            0,
+            0,
+            static_cast<GLint>(i),
+            width,
+            height,
+            1
+        );
+
+        glDeleteTextures(1, &face_texture);
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
+
+    glTextureParameteri(name_, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(name_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(name_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(name_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(name_, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 
 Texture::Texture(const glm::vec3& vec) : Texture{ cv::Mat{1, 1, CV_8UC3, cv::Scalar{vec.b, vec.g, vec.r}}, Interpolation::nearest } {}
