@@ -3,6 +3,20 @@
     "glew",
     "glfw3",
     "glm",
-    "nlohmann-json"
+    "nlohmann-json",
+    "stb",
+    {
+      "name": "imgui",
+      "features": [
+        "glfw-binding",
+        "opengl3-binding"
+      ]
+    }
+  ],
+  "overrides": [
+    {
+      "name": "imgui",
+      "version": "1.91.9"
+    }
   ]
 }
