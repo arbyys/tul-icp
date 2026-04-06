@@ -173,13 +173,10 @@ int App::run(void)
             else {
                 glBindFramebuffer(GL_FRAMEBUFFER, FBO_res_ID);
             }
-
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             //rescale_framebuffer(fb_width, fb_height);
             // set viewport to framebuffer's size
             glViewport(0, 0, fb_width, fb_height);
-
-            // clear existing
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             // first to render - skybox
             glDepthFunc(GL_LEQUAL);   // allow skybox at depth = 1.0
@@ -786,6 +783,10 @@ void App::init_framebuffer() {
 
     // Resolve FBO
     glCreateFramebuffers(1, &FBO_res_ID);
+
+    glCreateRenderbuffers(1, &RBO_res_ID);
+    glNamedRenderbufferStorage(RBO_res_ID, GL_DEPTH24_STENCIL8, fb_width, fb_height);
+    glNamedFramebufferRenderbuffer(FBO_res_ID, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO_res_ID);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &tex_res_ID);
     glTextureStorage2D(tex_res_ID, 1, GL_RGBA8, fb_width, fb_height);

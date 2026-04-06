@@ -102,6 +102,7 @@ private:
     GLuint RBO_color_ID{ 0 };
     GLuint RBO_depth_ID{ 0 };
     GLuint FBO_res_ID{ 0 };
+    GLuint RBO_res_ID{ 0 };
     GLuint tex_res_ID{ 0 };
 
 
