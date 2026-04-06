@@ -12,5 +12,11 @@
         "opengl3-binding"
       ]
     }
+  ],
+  "overrides": [
+    {
+      "name": "imgui",
+      "version": "1.91.9"
+    }
   ]
 }
